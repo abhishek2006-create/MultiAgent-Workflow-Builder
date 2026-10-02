@@ -1,0 +1,13 @@
+{
+  "name": "Retail order help",
+  "version": 1,
+  "nodes": [
+    { "id": "intake", "type": "input", "config": { "description": "Customer message" } },
+    { "id": "assist", "type": "agent", "config": { "mode": "mock", "task": "Help with an order question" } },
+    { "id": "reply", "type": "output", "config": { "description": "Customer-facing reply" } }
+  ],
+  "edges": [
+    { "source": "intake", "target": "assist" },
+    { "source": "assist", "target": "reply" }
+  ]
+}

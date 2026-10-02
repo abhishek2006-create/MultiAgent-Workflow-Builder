@@ -1,0 +1,9 @@
+{
+  "name": "@retail-support/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "files": ["workflow.schema.json"],
+  "exports": {
+    "./workflow.schema.json": "./workflow.schema.json"
+  }
+}
