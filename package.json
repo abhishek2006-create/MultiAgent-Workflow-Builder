@@ -1,0 +1,11 @@
+{
+  "name": "retail-support-workflow-builder",
+  "private": true,
+  "workspaces": ["apps/api", "packages/contracts"],
+  "scripts": {
+    "dev:api": "npm --workspace apps/api run start:dev",
+    "build:api": "npm --workspace apps/api run build",
+    "prisma:generate": "npm --workspace apps/api run prisma:generate",
+    "prisma:migrate": "npm --workspace apps/api run prisma:migrate"
+  }
+}
