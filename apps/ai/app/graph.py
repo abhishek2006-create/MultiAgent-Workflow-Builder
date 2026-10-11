@@ -1,9 +1,18 @@
 import asyncio
+<<<<<<< HEAD
 import json
+=======
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 import os
 from typing import TypedDict
 
 import httpx
+<<<<<<< HEAD
+=======
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.exceptions import OutputParserException
+from langchain_ollama import ChatOllama
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 from pydantic import ValidationError
 from langgraph.graph import END, START, StateGraph
 
@@ -12,8 +21,11 @@ from app.schemas import ChatResponse
 
 class ChatState(TypedDict, total=False):
     customer_message: str
+<<<<<<< HEAD
     agent_type: str
     instructions: str | None
+=======
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
     message: str
     intent: str
     needs_human: bool
@@ -36,6 +48,7 @@ class AIInvalidOutput(Exception):
 
 
 async def support_agent(state: ChatState) -> ChatState:
+<<<<<<< HEAD
     provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
     model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -87,6 +100,43 @@ async def support_agent(state: ChatState) -> ChatState:
     finally:
         if client is not None:
             await client.aio.aclose()
+=======
+    model_name = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    if not model_name or not base_url:
+        raise AIConfigurationError(
+            "Set OLLAMA_MODEL and OLLAMA_BASE_URL before calling the AI service"
+        )
+
+    model = ChatOllama(
+        model=model_name,
+        base_url=base_url,
+        temperature=0,
+        client_kwargs={"timeout": 20},
+    ).with_structured_output(ChatResponse, method="json_schema")
+
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a retail customer-support assistant. Be concise and polite. "
+                "No order lookup or account tools are connected yet, so do not claim "
+                "you checked an order or changed an account. Ask for information you "
+                "need and set needs_human=true when a person should take over. "
+                "Return an intent label and a customer-facing message."
+            )
+        ),
+        HumanMessage(content=state["customer_message"]),
+    ]
+
+    try:
+        parsed = await model.ainvoke(messages)
+    except (asyncio.TimeoutError, httpx.TimeoutException) as error:
+        raise AIProviderTimeout from error
+    except (OutputParserException, ValidationError) as error:
+        raise AIInvalidOutput from error
+    except Exception as error:
+        raise AIProviderError from error
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 
     try:
         result = parsed if isinstance(parsed, ChatResponse) else ChatResponse.model_validate(parsed)

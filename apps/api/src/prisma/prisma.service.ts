@@ -7,6 +7,7 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   async onModuleInit(): Promise<void> {
+<<<<<<< HEAD
     try {
       await this.$connect();
     } catch {
@@ -26,6 +27,9 @@ export class PrismaService
           `"npm --workspace apps/api run db:migrate:deploy".`,
       );
     }
+=======
+    await this.$connect();
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
   }
 
   async onModuleDestroy(): Promise<void> {

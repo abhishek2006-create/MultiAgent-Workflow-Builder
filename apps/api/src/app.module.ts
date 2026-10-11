@@ -4,6 +4,7 @@ import { HealthController } from './health/health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { WorkflowsModule } from './workflows/workflows.module';
+<<<<<<< HEAD
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { ExecutionsModule } from './executions/executions.module';
 import { AiModule } from './ai/ai.module';
@@ -73,6 +74,15 @@ function validateEnvironment(config: Record<string, unknown>) {
     WorkspacesModule,
     ExecutionsModule,
     AiModule,
+=======
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env', '.env'] }),
+    PrismaModule,
+    AuthModule,
+    WorkflowsModule,
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
   ],
   controllers: [HealthController],
 })

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -110,6 +111,20 @@ async function bootstrap(): Promise<void> {
   await app.listen(port, "0.0.0.0");
 
   console.log(`API server listening on port ${port}`);
+=======
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { AppModule } from './app.module';
+
+async function bootstrap(): Promise<void> {
+  const app = await NestFactory.create(AppModule);
+  app.enableCors();
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+  );
+  const port = Number(process.env.API_PORT ?? 3001);
+  await app.listen(port, '0.0.0.0');
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 }
 
 void bootstrap();

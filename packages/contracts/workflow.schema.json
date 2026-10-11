@@ -7,12 +7,16 @@
   "required": ["name", "version", "nodes", "edges"],
   "properties": {
     "name": { "type": "string", "minLength": 1 },
+<<<<<<< HEAD
     "description": { "type": "string" },
+=======
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
     "version": { "type": "integer", "minimum": 1 },
     "nodes": {
       "type": "array",
       "items": {
         "type": "object",
+<<<<<<< HEAD
         "additionalProperties": true,
         "required": ["id", "type", "position", "data"],
         "properties": {
@@ -31,6 +35,14 @@
             }
           },
           "data": { "type": "object" }
+=======
+        "additionalProperties": false,
+        "required": ["id", "type", "config"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "config": { "type": "object" }
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
         }
       }
     },
@@ -38,13 +50,22 @@
       "type": "array",
       "items": {
         "type": "object",
+<<<<<<< HEAD
         "additionalProperties": true,
+=======
+        "additionalProperties": false,
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
         "required": ["source", "target"],
         "properties": {
           "source": { "type": "string", "minLength": 1 },
           "target": { "type": "string", "minLength": 1 },
+<<<<<<< HEAD
           "sourceHandle": { "type": ["string", "null"] },
           "targetHandle": { "type": ["string", "null"] }
+=======
+          "sourceHandle": { "type": "string" },
+          "targetHandle": { "type": "string" }
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
         }
       }
     }

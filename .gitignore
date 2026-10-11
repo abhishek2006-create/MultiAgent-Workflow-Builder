@@ -1,6 +1,9 @@
 node_modules/
+<<<<<<< HEAD
 **/.next/
 **/.next-dev/
+=======
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 dist/
 coverage/
 .env
@@ -14,4 +17,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 apps/api/prisma/dev.db
+<<<<<<< HEAD
 apps/ai/.env
+=======
+apps/ai/.env
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7

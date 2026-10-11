@@ -6,20 +6,27 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+<<<<<<< HEAD
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceRole } from '@prisma/client';
+=======
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 
 export interface AuthenticatedUser {
   sub: string;
   organizationId: string;
+<<<<<<< HEAD
   sid: string;
   role?: WorkspaceRole;
+=======
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 }
 
 export type AuthenticatedRequest = Request & { user: AuthenticatedUser };
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+<<<<<<< HEAD
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
@@ -78,5 +85,26 @@ export class JwtAuthGuard implements CanActivate {
 
     request.user = { ...payload, role: membership.role };
     return true;
+=======
+  constructor(private readonly jwtService: JwtService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const [scheme, token] = (request.headers.authorization ?? '').split(' ');
+    if (scheme !== 'Bearer' || !token) {
+      throw new UnauthorizedException('Bearer token required');
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<AuthenticatedUser>(token);
+      if (!payload.sub || !payload.organizationId) {
+        throw new UnauthorizedException('Invalid token payload');
+      }
+      request.user = payload;
+      return true;
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
   }
 }

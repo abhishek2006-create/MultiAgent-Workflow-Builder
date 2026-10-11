@@ -10,15 +10,24 @@
     "target": "ES2022",
     "sourceMap": true,
     "outDir": "./dist",
+<<<<<<< HEAD
     "rootDir": ".",
     "baseUrl": "./",
+=======
+    "baseUrl": "./",
+    "incremental": true,
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true
+<<<<<<< HEAD
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
+=======
+  }
+>>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 }
