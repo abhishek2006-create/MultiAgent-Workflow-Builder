@@ -1,4 +1,11 @@
-import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateWorkflowDto {
   @IsString()
@@ -6,8 +13,18 @@ export class CreateWorkflowDto {
   @MaxLength(120)
   name!: string;
 
-  @IsObject()
-  definition!: Record<string, unknown>;
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @IsArray()
+  @ArrayMaxSize(500)
+  nodes!: Record<string, unknown>[];
+
+  @IsArray()
+  @ArrayMaxSize(2000)
+  edges!: Record<string, unknown>[];
 }
 
 export class UpdateWorkflowDto {
@@ -18,6 +35,17 @@ export class UpdateWorkflowDto {
   name?: string;
 
   @IsOptional()
-  @IsObject()
-  definition?: Record<string, unknown>;
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  nodes?: Record<string, unknown>[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(2000)
+  edges?: Record<string, unknown>[];
 }

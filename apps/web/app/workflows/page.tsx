@@ -1,7 +1,21 @@
-export default function WorkflowsPage() {
+import WorkflowBuilder from "../../components/workflow/WorkflowBuilder";
+
+interface WorkflowPageProps {
+  params: Promise<{
+    id: string;
+  }>;
+}
+
+export default async function WorkflowPage({
+  params,
+}: WorkflowPageProps) {
+  const { id } = await params;
+
   return (
-    <main className="p-8">
-      <h1 className="text-2xl font-bold">Workflows</h1>
+    <main className="min-h-screen bg-[#05070b]">
+      <WorkflowBuilder
+        workflowId={id}
+      />
     </main>
   );
 }

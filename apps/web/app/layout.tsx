@@ -1,4 +1,3 @@
-// @ts-ignore - CSS side-effect imports are handled by Next.js
 import "./globals.css";
 import type { Metadata } from "next";
 import { TopNav } from "../components/layout/Topbar";

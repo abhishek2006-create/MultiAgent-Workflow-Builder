@@ -1,0 +1,8 @@
+[33m9426ea8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAbhishek[m[33m, [m[1;31morigin/Abhishek[m[33m, [m[1;32mmain[m[33m)[m HEAD@{0}: checkout: moving from main to Abhishek
+[33m9426ea8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAbhishek[m[33m, [m[1;31morigin/Abhishek[m[33m, [m[1;32mmain[m[33m)[m HEAD@{1}: checkout: moving from Abhishek to main
+[33m21ae4b0[m HEAD@{2}: reset: moving to HEAD
+[33m21ae4b0[m HEAD@{3}: checkout: moving from Abhishek to Abhishek
+[33m21ae4b0[m HEAD@{4}: commit: frontend updated
+[33m9426ea8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAbhishek[m[33m, [m[1;31morigin/Abhishek[m[33m, [m[1;32mmain[m[33m)[m HEAD@{5}: checkout: moving from main to Abhishek
+[33m9426ea8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAbhishek[m[33m, [m[1;31morigin/Abhishek[m[33m, [m[1;32mmain[m[33m)[m HEAD@{6}: Branch: renamed refs/heads/main to refs/heads/main
+[33m9426ea8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAbhishek[m[33m, [m[1;31morigin/Abhishek[m[33m, [m[1;32mmain[m[33m)[m HEAD@{8}: commit (initial): Initial commit from Create Next App

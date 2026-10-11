@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
+import { getApiBaseUrl } from "../../lib/api-url";
 
 export default function SignupPage() {
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -19,7 +20,26 @@ export default function SignupPage() {
   const [tos, setTos] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const loadingRef = useRef(false);
+
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      const target = new URL(next, window.location.origin);
+      if (target.origin === window.location.origin) {
+        setReturnTo(`${target.pathname}${target.search}${target.hash}`);
+      }
+    }
+  }, []);
+
+  const handleGithubLogin = () => {
+    window.location.href = "/api/auth/github";
+  };
+
+  const handleGoogleLogin = () => {
+    window.location.href = "/api/auth/google";
+  };
 
   useEffect(() => {
     const card = cardRef.current;
@@ -273,8 +293,8 @@ export default function SignupPage() {
       nextErrors.email = "Enter a valid email address.";
     }
 
-    if (password.length < 8) {
-      nextErrors.pw = "Use at least 8 characters.";
+    if (password.length < 10) {
+      nextErrors.pw = "Use at least 10 characters.";
     }
 
     if (!tos) {
@@ -325,7 +345,7 @@ export default function SignupPage() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (loading || submitted) return;
@@ -355,6 +375,57 @@ export default function SignupPage() {
       repeat: -1,
       ease: "none",
     });
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const response = await fetch(`${apiBase}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          organizationName: `${name.trim()}'s Workspace`.slice(0, 100),
+        }),
+      });
+
+      let payload: unknown = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const rawMessage =
+          typeof payload === "object" &&
+          payload !== null &&
+          "message" in payload
+            ? (payload as { message?: unknown }).message
+            : null;
+        const message = Array.isArray(rawMessage)
+          ? rawMessage.join(", ")
+          : typeof rawMessage === "string"
+            ? rawMessage
+            : "Unable to create your account. Please try again.";
+        throw new Error(message);
+      }
+    } catch (error) {
+      gsap.killTweensOf("#sp");
+      gsap.set("#sp", { display: "none", rotation: 0 });
+      setLoading(false);
+      loadingRef.current = false;
+      setErrors({
+        form:
+          error instanceof Error
+            ? error.message
+            : "Unable to create your account. Please try again.",
+      });
+      return;
+    }
 
     window.setTimeout(() => {
       setSubmitted(true);
@@ -1059,7 +1130,7 @@ export default function SignupPage() {
 
         /* Signup is a standalone auth screen: do not stack the app navbar above it. */
         body:has(.auth-page) > header,
-        body:has(.auth-page) > nav,
+        body:has(.auth-page) > nav:not(.authenticated-nav),
         body:has(.auth-page) .site-header,
         body:has(.auth-page) .site-navbar,
         body:has(.auth-page) [data-site-navbar] {
@@ -1208,22 +1279,27 @@ export default function SignupPage() {
 
           <section className="card" id="card" ref={cardRef}>
             <div id="form" ref={formRef}>
-              <h2 className="fi">SIGN IN</h2>
+              <h2 className="fi">CREATE YOUR ACCOUNT</h2>
 
               <p className="sub fi">
                 Welcome ! Your workflows kept running while you were away.
               </p>
 
               <div className="soc fi">
-                <button className="btn" type="button">
+                <button className="btn" type="button" onClick={handleGithubLogin}>
                   GitHub
                 </button>
-                <button className="btn" type="button">
+                <button className="btn" type="button" onClick={handleGoogleLogin}>
                   Google
                 </button>
               </div>
 
               <div className="or fi">OR WITH EMAIL</div>
+              {errors.form && (
+                <p role="alert" style={{ color: "#fb7185", marginBottom: 16 }}>
+                  {errors.form}
+                </p>
+              )}
 
               <form id="f" noValidate onSubmit={handleSubmit}>
                 <div
@@ -1281,7 +1357,7 @@ export default function SignupPage() {
                       id="pw"
                       type={showPassword ? "text" : "password"}
                       autoComplete="new-password"
-                      placeholder="At least 8 characters"
+                      placeholder="At least 10 characters"
                       value={password}
                       onChange={(event) => {
                         setPassword(event.target.value);
@@ -1388,7 +1464,16 @@ export default function SignupPage() {
               </form>
 
               <p className="sw fi">
-                Already have an account? <a href="/login">Log in</a>
+                Already have an account?{" "}
+                <a
+                  href={
+                    returnTo
+                      ? `/login?next=${encodeURIComponent(returnTo)}`
+                      : "/login"
+                  }
+                >
+                  Log in
+                </a>
               </p>
             </div>
 
@@ -1417,6 +1502,9 @@ export default function SignupPage() {
                 className="btn pri"
                 type="button"
                 style={{ maxWidth: 260 }}
+                onClick={() => {
+                  window.location.href = returnTo ?? "/workflows";
+                }}
               >
                 ▶ LAUNCH BUILDER
               </button>

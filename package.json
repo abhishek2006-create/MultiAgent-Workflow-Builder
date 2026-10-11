@@ -10,7 +10,10 @@
     "dev:api": "npm --workspace apps/api run start:dev",
     "build:api": "npm --workspace apps/api run build",
     "prisma:generate": "npm --workspace apps/api run prisma:generate",
-    "prisma:migrate": "npm --workspace apps/api run prisma:migrate"
+    "prisma:migrate": "npm --workspace apps/api run prisma:migrate",
+    "db:migrate:deploy": "npm --workspace apps/api run db:migrate:deploy",
+    "db:up": "docker compose -f docker-compose.db.yml up -d --wait",
+    "db:stop": "docker compose -f docker-compose.db.yml stop postgres"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3"

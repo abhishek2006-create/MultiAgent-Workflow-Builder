@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
+import { getApiBaseUrl } from "../../lib/api-url";
 
 export default function LoginPage() {
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -14,12 +15,36 @@ export default function LoginPage() {
   const [strength, setStrength] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [firstName, setFirstName] = useState("");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [tos, setTos] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const loadingRef = useRef(false);
+
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      const target = new URL(next, window.location.origin);
+      if (target.origin === window.location.origin) {
+        setReturnTo(`${target.pathname}${target.search}${target.hash}`);
+      }
+    }
+
+    if (new URLSearchParams(window.location.search).get("error") === "oauth_failed") {
+      setErrors({
+        email: "GitHub sign-in failed. Please try again or use your email and password.",
+      });
+    }
+  }, []);
+
+  const handleGoogleLogin = () => {
+    window.location.href = "/api/auth/google";
+  };
+
+  const handleGithubLogin = () => {
+    window.location.href = "/api/auth/github";
+  };
 
   useEffect(() => {
     const card = cardRef.current;
@@ -265,10 +290,6 @@ export default function LoginPage() {
   const validate = () => {
     const nextErrors: Record<string, string> = {};
 
-    if (name.trim().length < 2) {
-      nextErrors.name = "Enter your full name.";
-    }
-
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
       nextErrors.email = "Enter a valid email address.";
     }
@@ -325,13 +346,12 @@ export default function LoginPage() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (loading || submitted) return;
     if (!validate()) return;
 
-    setFirstName(name.trim().split(" ")[0] || name.trim());
     setLoading(true);
     loadingRef.current = true;
 
@@ -345,9 +365,7 @@ export default function LoginPage() {
       });
     }
 
-    gsap.set("#sp", {
-      display: "block",
-    });
+    gsap.set("#sp", { display: "block" });
 
     gsap.to("#sp", {
       rotation: 360,
@@ -356,10 +374,65 @@ export default function LoginPage() {
       ease: "none",
     });
 
-    window.setTimeout(() => {
+    try {
+      const apiBase = getApiBaseUrl();
+
+      const response = await fetch(`${apiBase}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      });
+
+      let payload: unknown = null;
+
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        let message = "Unable to sign in. Please check your credentials.";
+
+        if (
+          typeof payload === "object" &&
+          payload !== null &&
+          "message" in payload
+        ) {
+          const raw = (payload as { message?: unknown }).message;
+
+          message = Array.isArray(raw)
+            ? raw.join(", ")
+            : String(raw ?? message);
+        }
+
+        throw new Error(message);
+      }
+
+      const returnedEmail =
+        typeof payload === "object" &&
+        payload !== null &&
+        "user" in payload &&
+        typeof (payload as { user?: unknown }).user === "object" &&
+        (payload as { user?: unknown }).user !== null
+          ? String(
+              (
+                payload as {
+                  user: { email?: unknown };
+                }
+              ).user.email ?? email.trim(),
+            )
+          : email.trim();
+
+      setFirstName(returnedEmail.split("@")[0] || "Friend");
       setSubmitted(true);
-      setLoading(false);
-      loadingRef.current = false;
 
       const form = formRef.current;
       const success = okRef.current;
@@ -375,9 +448,7 @@ export default function LoginPage() {
           duration: 0.35,
           ease: "power2.in",
         })
-        .set(form, {
-          display: "none",
-        })
+        .set(form, { display: "none" })
         .set(success, {
           display: "flex",
           opacity: 1,
@@ -446,7 +517,38 @@ export default function LoginPage() {
           },
         );
       }
-    }, 1500);
+    } catch (error) {
+      console.error("Login failed:", error);
+
+      setErrors({
+        email:
+          error instanceof Error
+            ? error.message
+            : "Unable to sign in. Please try again.",
+      });
+
+      gsap.fromTo(
+        cardRef.current,
+        { x: 0 },
+        {
+          keyframes: {
+            x: [-9, 8, -6, 4, 0],
+          },
+          duration: 0.45,
+          ease: "power1.inOut",
+        },
+      );
+    } finally {
+      gsap.killTweensOf("#sp");
+
+      gsap.set("#sp", {
+        display: "none",
+        rotation: 0,
+      });
+
+      setLoading(false);
+      loadingRef.current = false;
+    }
   };
 
   const passwordLabel = ["—", "WEAK", "FAIR", "GOOD", "STRONG"][strength];
@@ -1057,9 +1159,9 @@ export default function LoginPage() {
           }
         }
 
-        /* Signup is a standalone auth screen: do not stack the app navbar above it. */
+        /* Login is a standalone auth screen: do not stack the app navbar above it. */
         body:has(.auth-page) > header,
-        body:has(.auth-page) > nav,
+        body:has(.auth-page) > nav:not(.authenticated-nav),
         body:has(.auth-page) .site-header,
         body:has(.auth-page) .site-navbar,
         body:has(.auth-page) [data-site-navbar] {
@@ -1091,17 +1193,17 @@ export default function LoginPage() {
             </div>
 
             <h1 className="bi">
-              FORGE YOUR
+              WELCOME TO
               <br />
-              FIRST AGENT.
+               THE AGENT GRID!
             </h1>
 
             <p className="bi">
-              Create a workspace and start wiring agents, tools and knowledge
-              into workflows you can actually see.
+              Continue building intelligent workflows with your agents, tools and
+              knowledge already connected to your workspace.
             </p>
 
-            <span className="tag bi">AI CORE ACTIVE · FREE TO START</span>
+            <span className="tag bi">AI CORE ACTIVE · WORKSPACE ONLINE</span>
 
             <div className="net bi">
               <svg viewBox="0 0 420 270" aria-label="Animated workflow preview">
@@ -1208,17 +1310,27 @@ export default function LoginPage() {
 
           <section className="card" id="card" ref={cardRef}>
             <div id="form" ref={formRef}>
-              <h2 className="fi">CREATE ACCOUNT</h2>
+              <h2 className="fi">WELCOME BACK</h2>
 
               <p className="sub fi">
-                Start building in under a minute. No credit card.
+                Sign in to your FlowForge AI workspace and continue building.
               </p>
 
               <div className="soc fi">
-                <button className="btn" type="button">
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={handleGithubLogin}
+                  disabled={loading}
+                >
                   GitHub
                 </button>
-                <button className="btn" type="button">
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                >
                   Google
                 </button>
               </div>
@@ -1258,8 +1370,8 @@ export default function LoginPage() {
                     <input
                       id="pw"
                       type={showPassword ? "text" : "password"}
-                      autoComplete="new-password"
-                      placeholder="At least 8 characters"
+                      autoComplete="current-password"
+                      placeholder="Enter your password"
                       value={password}
                       onChange={(event) => {
                         setPassword(event.target.value);
@@ -1360,13 +1472,22 @@ export default function LoginPage() {
                 >
                   <span className="spin" id="sp" />
                   <span id="gl">
-                    {loading ? "FORGING…" : "▶ Sign In"}
+                    {loading ? "SIGNING IN…" : "▶ SIGN IN"}
                   </span>
                 </button>
               </form>
 
               <p className="sw fi">
-                Don't have account? <a href="/signup">Log in</a>
+                New to FlowForge AI?{" "}
+                <a
+                  href={
+                    returnTo
+                      ? `/signup?next=${encodeURIComponent(returnTo)}`
+                      : "/signup"
+                  }
+                >
+                  Create account
+                </a>
               </p>
             </div>
 
@@ -1395,6 +1516,9 @@ export default function LoginPage() {
                 className="btn pri"
                 type="button"
                 style={{ maxWidth: 260 }}
+                onClick={() => {
+                  window.location.href = returnTo ?? "/workflows";
+                }}
               >
                 ▶ LAUNCH BUILDER
               </button>

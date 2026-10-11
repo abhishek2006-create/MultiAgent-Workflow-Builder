@@ -10,31 +10,258 @@ datasource db {
 model Organization {
   id        String     @id @default(cuid())
   name      String
+  slug      String     @unique
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
   users     User[]
   workflows Workflow[]
+  memberships WorkspaceMembership[]
+  invitations WorkspaceInvitation[]
 }
 
 model User {
   id             String        @id @default(cuid())
   email          String        @unique
-  passwordHash   String
+  username       String?       @unique
+  passwordHash   String?
+
   organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  identities AuthIdentity[]
+  memberships WorkspaceMembership[]
+  createdVersions WorkflowVersion[]
+  triggeredExecutions WorkflowExecution[]
+  approvedRequests Approval[]
+  sessions AuthSession[]
+  sentWorkspaceInvitations WorkspaceInvitation[] @relation("WorkspaceInviter")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+model AuthIdentity {
+  id String @id @default(cuid())
+
+  provider String
+  subject  String
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, subject])
+  @@index([userId])
 }
 
 model Workflow {
-  id             String       @id @default(cuid())
-  name           String
-  version        Int          @default(1)
-  definition     Json
+  id          String   @id @default(cuid())
+
+  name        String
+  description String?
+
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
 
-  @@index([organizationId])
+  definition Json
+  status      String   @default("DRAFT")
+
+  nodes       Json     @default("[]")
+  edges       Json     @default("[]")
+
+  version     Int      @default(1)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  executions  WorkflowExecution[]
+  versions    WorkflowVersion[]
+}
+
+model AuthSession {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([organizationId, userId])
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+model WorkspaceMembership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           WorkspaceRole    @default(MEMBER)
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, status])
+  @@index([organizationId, role, status])
+}
+
+model WorkspaceInvitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String
+  role           WorkspaceRole @default(MEMBER)
+  tokenHash      String       @unique
+  invitedById    String?
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User?        @relation("WorkspaceInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, email, expiresAt])
+  @@index([invitedById, createdAt])
+}
+
+model WorkflowVersion {
+  id          String   @id @default(cuid())
+  workflowId  String
+  version     Int
+  snapshot    Json
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  workflow   Workflow           @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  createdBy  User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  executions WorkflowExecution[]
+
+  @@unique([workflowId, version])
+  @@index([createdById, createdAt])
+}
+
+model WorkflowExecution {
+  id         String   @id @default(cuid())
+
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  workflowVersionId String?
+  workflowVersion   WorkflowVersion? @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
+  triggeredById     String?
+  triggeredBy       User? @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
+  traceId            String? @unique
+
+  status     String
+
+  input      Json?
+  output     Json?
+  error      String?
+
+  startedAt  DateTime?
+  completedAt DateTime?
+
+  createdAt  DateTime @default(now())
+
+  steps      WorkflowExecutionStep[]
+  approvals  Approval[]
+  workerLease ExecutionWorkerLease?
+
+  @@index([workflowId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ExecutionWorkerLease {
+  executionId    String   @id
+  workerId       String
+  leaseExpiresAt DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  execution WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([leaseExpiresAt])
+  @@index([workerId, leaseExpiresAt])
+}
+
+model WorkflowExecutionStep {
+  id          String   @id @default(cuid())
+  executionId String
+  nodeId      String
+  nodeType    String
+  status      String
+  input       Json?
+  output      Json?
+  error       String?
+  retryCount  Int      @default(0)
+  durationMs  Int?
+  usage       Json?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  execution WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  approvals Approval[]
+
+  @@unique([executionId, nodeId])
+  @@index([executionId, status])
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Approval {
+  id          String         @id @default(cuid())
+  executionId String
+  stepId      String?
+  status      ApprovalStatus @default(PENDING)
+  requestedAt DateTime       @default(now())
+  resolvedAt  DateTime?
+  approverId  String?
+  comment     String?
+  decision    Json?
+
+  execution WorkflowExecution     @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  step      WorkflowExecutionStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  approver  User?                  @relation(fields: [approverId], references: [id], onDelete: SetNull)
+
+  @@index([executionId, status])
+  @@index([approverId, status])
+}
+
+enum ExecutionStatus {
+  IDLE
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELLED
 }

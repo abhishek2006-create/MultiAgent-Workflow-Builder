@@ -1,6 +1,7 @@
 import os
+import hmac
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 
 from app.graph import (
     AIConfigurationError,
@@ -20,9 +21,16 @@ def health() -> dict[str, str]:
 
 
 @app.post("/ai/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(
+    request: ChatRequest,
+    service_secret: str | None = Header(default=None, alias="X-AI-Service-Secret"),
+) -> ChatResponse:
+    configured_secret = os.getenv("AI_SERVICE_SECRET", "").strip()
+    supplied_secret = service_secret or ""
+    if not configured_secret or not hmac.compare_digest(supplied_secret, configured_secret):
+        raise HTTPException(status_code=401, detail="AI service authentication failed")
     try:
-        result = await chat_graph.ainvoke({"customer_message": request.customer_message})
+        result = await chat_graph.ainvoke(request.model_dump())
         return ChatResponse.model_validate(result)
     except AIConfigurationError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error

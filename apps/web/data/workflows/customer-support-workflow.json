@@ -1,0 +1,26 @@
+{
+  "name": "Customer Support Workflow",
+  "description": "AI support workflow",
+  "nodes": [
+    {
+      "id": "input",
+      "type": "input",
+      "position": {
+        "x": 100,
+        "y": 250
+      },
+      "data": {
+        "label": "Input",
+        "description": "Workflow input",
+        "category": "CORE"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "input-planner",
+      "source": "input",
+      "target": "planner"
+    }
+  ]
+}
