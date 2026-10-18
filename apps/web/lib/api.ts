@@ -1,13 +1,17 @@
 
 import type {
   CreateWorkflowRequest,
+  DashboardOverview,
   ExecutionStatus,
   RunWorkflowRequest,
   RunWorkflowResponse,
   UpdateWorkflowRequest,
   ValidateWorkflowResponse,
+  WorkflowDefinition,
   Workflow,
   WorkflowExecution,
+  WorkflowExecutionHistoryPage,
+  PendingApproval,
 } from "../types/workflow";
 import { getApiBaseUrl } from "./api-url";
 
@@ -256,6 +260,12 @@ export const api = {
         },
       );
     },
+    import(payload: CreateWorkflowRequest): Promise<Workflow> {
+      return request<Workflow>("/workflows/import", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
 
     /**
      * Update an existing workflow.
@@ -300,6 +310,12 @@ export const api = {
         },
       );
     },
+    validateDefinition(definition: WorkflowDefinition): Promise<ValidateWorkflowResponse> {
+      return request("/workflows/validate-definition", {
+        method: "POST",
+        body: JSON.stringify(definition),
+      });
+    },
 
     /**
      * Start workflow execution.
@@ -332,6 +348,12 @@ export const api = {
         )}`,
       );
     },
+    executions(workflowId: string, cursor?: string): Promise<WorkflowExecutionHistoryPage> {
+      const params = new URLSearchParams();
+      if (cursor) params.set("cursor", cursor);
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return request(`/workflows/${encodeURIComponent(workflowId)}/executions${suffix}`);
+    },
 
     resolveApproval(
       executionId: string,
@@ -346,10 +368,34 @@ export const api = {
     },
   },
   executions: {
+    cancel(executionId: string): Promise<{ id: string; status: "CANCELLED" }> {
+      return request(`/executions/${encodeURIComponent(executionId)}/cancel`, {
+        method: "POST",
+      });
+    },
     retry(executionId: string): Promise<RunWorkflowResponse & { retriedFromExecutionId: string }> {
       return request(`/executions/${encodeURIComponent(executionId)}/retry`, {
         method: "POST",
       });
+    },
+  },
+  approvals: {
+    pending(cursor?: string): Promise<{ items: PendingApproval[]; nextCursor: string | null }> {
+      const params = new URLSearchParams();
+      if (cursor) params.set("cursor", cursor);
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return request(`/approvals/pending${suffix}`);
+    },
+    resolve(executionId: string, approvalId: string, approved: boolean, comment?: string) {
+      return request(`/executions/${encodeURIComponent(executionId)}/approvals/${encodeURIComponent(approvalId)}/resolve`, {
+        method: "POST",
+        body: JSON.stringify({ approved, comment }),
+      });
+    },
+  },
+  dashboard: {
+    overview(): Promise<DashboardOverview> {
+      return request("/dashboard/overview");
     },
   },
 };

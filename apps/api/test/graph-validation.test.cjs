@@ -19,6 +19,23 @@ test("accepts a connected input, approval, and output graph", () => {
   assert.deepEqual(result.errors, []);
 });
 
+test("accepts a connected graph using an OpenAI model", () => {
+  const result = validateWorkflowGraph(
+    [
+      node("input", "input", 0),
+      { ...node("agent", "agent", 200), data: { model: "gpt-5.5", agentType: "support" } },
+      node("output", "output", 400),
+    ],
+    [
+      { id: "edge-1", source: "input", target: "agent" },
+      { id: "edge-2", source: "agent", target: "output" },
+    ],
+  );
+
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.errors, []);
+});
+
 test("rejects a directed cycle", () => {
   const result = validateWorkflowGraph(
     [node("input", "input", 0), node("middle", "agent", 200), node("output", "output", 400)],

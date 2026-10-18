@@ -1,21 +1,9 @@
-import WorkflowBuilder from "../../components/workflow/WorkflowBuilder";
+import WorkflowList from "../../components/workflow/WorkflowList";
 
-interface WorkflowPageProps {
-  params: Promise<{
-    id: string;
-  }>;
-}
-
-export default async function WorkflowPage({
-  params,
-}: WorkflowPageProps) {
-  const { id } = await params;
-
+export default function WorkflowsPage() {
   return (
     <main className="min-h-screen bg-[#05070b]">
-      <WorkflowBuilder
-        workflowId={id}
-      />
+      <WorkflowList />
     </main>
   );
 }

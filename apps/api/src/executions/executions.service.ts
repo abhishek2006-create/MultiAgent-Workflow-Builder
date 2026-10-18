@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { WorkflowsService } from "../workflows/workflows.service";
 import { CreateExecutionDto } from "./execution.dto";
+import { validateExecutionInput } from "./input-schema";
 
 @Injectable()
 export class ExecutionsService {
@@ -24,7 +25,13 @@ export class ExecutionsService {
     input: CreateExecutionDto,
   ) {
     const workflow = await this.workflows.get(organizationId, workflowId);
-    const validation = await this.workflows.validate(organizationId, workflowId);
+    const nodes = Array.isArray(workflow.nodes)
+      ? workflow.nodes as unknown as Record<string, unknown>[]
+      : [];
+    const edges = Array.isArray(workflow.edges)
+      ? workflow.edges as unknown as Record<string, unknown>[]
+      : [];
+    const validation = this.workflows.validateDefinition({ nodes, edges });
     if (!validation.valid) {
       throw new BadRequestException({
         message: "Workflow graph is invalid and cannot be run.",
@@ -32,6 +39,8 @@ export class ExecutionsService {
         warnings: validation.warnings,
       });
     }
+    const runtimeInput = input.input ?? {};
+    validateExecutionInput(runtimeInput, nodes);
 
     const version = await this.prisma.workflowVersion.findUnique({
       where: { workflowId_version: { workflowId: workflow.id, version: workflow.version } },
@@ -48,7 +57,7 @@ export class ExecutionsService {
         triggeredById: userId,
         traceId: randomUUID(),
         status: "QUEUED",
-        input: (input.input ?? {}) as Prisma.InputJsonValue,
+        input: runtimeInput as Prisma.InputJsonValue,
       },
       select: { id: true, status: true, traceId: true, createdAt: true },
     });
@@ -60,11 +69,26 @@ export class ExecutionsService {
     };
   }
 
-  async history(organizationId: string, workflowId: string) {
+  async history(organizationId: string, workflowId: string, cursor?: string, limitText?: string) {
     await this.workflows.get(organizationId, workflowId);
-    return this.prisma.workflowExecution.findMany({
-      where: { workflowId, workflow: { organizationId } },
-      orderBy: { createdAt: "desc" },
+    const limit = limitText === undefined ? 25 : Number(limitText);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException("Execution history page limit must be an integer from 1 to 100.");
+    }
+    const after = decodeHistoryCursor(cursor);
+    const rows = await this.prisma.workflowExecution.findMany({
+      where: {
+        workflowId,
+        workflow: { organizationId },
+        ...(after ? {
+          OR: [
+            { createdAt: { lt: after.createdAt } },
+            { createdAt: after.createdAt, id: { lt: after.id } },
+          ],
+        } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
       select: {
         id: true,
         status: true,
@@ -79,6 +103,9 @@ export class ExecutionsService {
         _count: { select: { steps: true } },
       },
     });
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    return { items, nextCursor: hasMore ? encodeHistoryCursor(items.at(-1)!) : null };
   }
 
   async get(organizationId: string, workflowId: string, executionId: string) {
@@ -143,14 +170,26 @@ export class ExecutionsService {
       select: { id: true, status: true },
     });
     if (!execution) throw new NotFoundException("Execution not found");
-    if (execution.status !== "QUEUED") {
-      throw new ConflictException("Only queued executions can be cancelled before a worker starts them.");
+    if (!["QUEUED", "RUNNING", "WAITING_APPROVAL"].includes(execution.status)) {
+      throw new ConflictException("Only queued, running, or approval-paused executions can be cancelled.");
     }
-    const changed = await this.prisma.workflowExecution.updateMany({
-      where: { id: execution.id, status: "QUEUED" },
-      data: { status: "CANCELLED", completedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.workflowExecution.updateMany({
+        where: { id: execution.id, status: { in: ["QUEUED", "RUNNING", "WAITING_APPROVAL"] } },
+        data: { status: "CANCELLED", completedAt: new Date() },
+      });
+      if (changed.count !== 1) throw new ConflictException("Execution state changed; refresh and try again.");
+      const cancelledAt = new Date();
+      await tx.workflowExecutionStep.updateMany({
+        where: { executionId: execution.id, status: { in: ["RUNNING", "WAITING_APPROVAL"] } },
+        data: { status: "CANCELLED", error: "Execution cancelled by a workspace member.", completedAt: cancelledAt },
+      });
+      await tx.approval.updateMany({
+        where: { executionId: execution.id, status: "PENDING" },
+        data: { status: "CANCELLED", resolvedAt: cancelledAt },
+      });
+      await tx.executionWorkerLease.deleteMany({ where: { executionId: execution.id } });
     });
-    if (changed.count !== 1) throw new ConflictException("Execution state changed; refresh and try again.");
     return { id: execution.id, status: "CANCELLED" };
   }
 
@@ -190,4 +229,25 @@ export class ExecutionsService {
       retriedFromExecutionId: failed.id,
     };
   }
+}
+
+function decodeHistoryCursor(cursor?: string): { createdAt: Date; id: string } | undefined {
+  if (cursor === undefined) return undefined;
+  if (!cursor || cursor.length > 512) throw new BadRequestException("Execution history cursor is invalid.");
+  try {
+    const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (!value || typeof value !== "object") throw new Error("invalid cursor");
+    const candidate = value as Record<string, unknown>;
+    const createdAt = typeof candidate.createdAt === "string" ? new Date(candidate.createdAt) : null;
+    if (!createdAt || !Number.isFinite(createdAt.getTime()) || typeof candidate.id !== "string" || !candidate.id.trim() || candidate.id.length > 200) {
+      throw new Error("invalid cursor");
+    }
+    return { createdAt, id: candidate.id };
+  } catch {
+    throw new BadRequestException("Execution history cursor is invalid.");
+  }
+}
+
+function encodeHistoryCursor(value: { createdAt: Date; id: string }): string {
+  return Buffer.from(JSON.stringify({ createdAt: value.createdAt.toISOString(), id: value.id }), "utf8").toString("base64url");
 }

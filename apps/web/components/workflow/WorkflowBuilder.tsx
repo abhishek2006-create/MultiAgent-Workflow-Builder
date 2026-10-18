@@ -626,6 +626,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 
 import type {
   Connection,
@@ -646,8 +647,10 @@ import {
 import {
   useWorkflowApi,
 } from "../../hooks/useWorkflowApi";
+import { api } from "../../lib/api";
 
 import type {
+  CreateWorkflowRequest,
   WorkflowNodeData,
   WorkflowToolKind,
 } from "../../types/workflow";
@@ -659,6 +662,8 @@ interface WorkflowBuilderProps {
 export default function WorkflowBuilder({
   workflowId,
 }: WorkflowBuilderProps) {
+  const router = useRouter();
+  const savedWorkflowId = useWorkflowStore((state) => state.workflowId);
   const nodes =
     useWorkflowStore(
       (state) => state.nodes,
@@ -698,6 +703,9 @@ export default function WorkflowBuilder({
     );
 
   const [isRunning, setIsRunning] = useState(false);
+  const [showRunDialog, setShowRunDialog] = useState(false);
+  const [runInputText, setRunInputText] = useState("{}");
+  const [runInputError, setRunInputError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -739,10 +747,8 @@ export default function WorkflowBuilder({
       (state) => state.error,
     );
 
-  const setNodes =
-    useWorkflowStore(
-      (state) => state.setNodes,
-    );
+  const validationErrors = useWorkflowStore((state) => state.validationErrors);
+  const validationWarnings = useWorkflowStore((state) => state.validationWarnings);
 
   const addNode =
     useWorkflowStore(
@@ -792,11 +798,17 @@ export default function WorkflowBuilder({
     step.status === "RUNNING" || step.status === "WAITING_APPROVAL",
   );
   const highlightedNodeId = liveStep?.nodeId ?? playbackNodeId;
+  const invalidNodeIds = useMemo(
+    () => new Set(validationErrors.flatMap((issue) => issue.nodeId ? [issue.nodeId] : [])),
+    [validationErrors],
+  );
   const displayedNodes = useMemo(() => {
     const steps = new Map(executionDetails?.steps?.map((step) => [step.nodeId, step]));
     return nodes.map((node) => {
       const step = steps.get(node.id);
-      const status = node.id === highlightedNodeId
+      const status = invalidNodeIds.has(node.id)
+        ? "error"
+        : node.id === highlightedNodeId
         ? "running"
         : step?.status === "COMPLETED"
           ? "completed"
@@ -809,7 +821,7 @@ export default function WorkflowBuilder({
               : node.data.status ?? "idle";
       return { ...node, data: { ...node.data, status } };
     });
-  }, [nodes, executionDetails, executionStatus, highlightedNodeId]);
+  }, [nodes, executionDetails, executionStatus, highlightedNodeId, invalidNodeIds]);
 
   const displayedEdges = useMemo(() => {
     const completed = new Set(
@@ -839,6 +851,7 @@ export default function WorkflowBuilder({
     runWorkflow,
     resolveApproval,
     retryExecution,
+    cancelExecution,
   } = useWorkflowApi();
 
   const initializeNewWorkflow = useWorkflowStore(
@@ -857,6 +870,7 @@ export default function WorkflowBuilder({
     }
 
     if (!workflowId) {
+      initializeNewWorkflow();
       return;
     }
 
@@ -903,6 +917,9 @@ export default function WorkflowBuilder({
                 : "CORE",
           ...(toolKind ? { toolKind } : {}),
           ...(toolKind === "calculator" ? { expression: "1 + 1" } : {}),
+          ...(toolKind === "text" ? { toolOperation: "uppercase", inputPath: "input.message" } : {}),
+          ...(toolKind === "json" ? { toolOperation: "parse", inputPath: "input.json" } : {}),
+          ...(toolKind === "date" ? { toolOperation: "now" } : {}),
           ...(type === "condition"
             ? { conditionPath: "input.message", conditionOperator: "exists" as const }
             : {}),
@@ -956,11 +973,14 @@ export default function WorkflowBuilder({
   const handleSave =
     useCallback(async () => {
       try {
-        await saveWorkflow();
+        const saved = await saveWorkflow();
+        if (workflowId === "demo" || !workflowId) {
+          router.replace(`/workflows/${encodeURIComponent(saved.id)}`);
+        }
       } catch {
         // Store already contains error.
       }
-    }, [saveWorkflow]);
+    }, [saveWorkflow, workflowId, router]);
 
   /* ================================== */
   /* Validate                           */
@@ -979,19 +999,39 @@ export default function WorkflowBuilder({
   /* Run                                */
   /* ================================== */
 
-  const handleRun =
+  const handleRun = useCallback(() => {
+    setRunInputError(null);
+    setShowRunDialog(true);
+  }, []);
+
+  const handleRunSubmit =
     useCallback(async () => {
       if (isRunning) {
         return;
       }
 
+      let input: Record<string, unknown>;
+      try {
+        const parsed: unknown = JSON.parse(runInputText);
+        if (!isRecord(parsed)) throw new Error("Input must be a JSON object.");
+        if (new TextEncoder().encode(runInputText).length > 64 * 1024) {
+          throw new Error("Runtime input must be 64 KB or smaller.");
+        }
+        input = parsed;
+      } catch (cause) {
+        setRunInputError(cause instanceof Error ? cause.message : "Enter a valid JSON object.");
+        return;
+      }
+
       setIsRunning(true);
       try {
-        if (isDirty) {
-          await saveWorkflow();
+        if (isDirty || !savedWorkflowId) {
+          const saved = await saveWorkflow();
+          router.replace(`/workflows/${encodeURIComponent(saved.id)}`);
         }
 
-        await runWorkflow();
+        await runWorkflow(input);
+        setShowRunDialog(false);
       } catch {
         // Store already contains error.
       } finally {
@@ -1000,9 +1040,59 @@ export default function WorkflowBuilder({
     }, [
       isRunning,
       isDirty,
+      savedWorkflowId,
       saveWorkflow,
       runWorkflow,
+      runInputText,
+      router,
     ]);
+
+  const handleImport = useCallback(async (file: File) => {
+    if (file.size > 1024 * 1024) {
+      useWorkflowStore.getState().setError("Workflow import must be 1 MB or smaller.");
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!isRecord(parsed) || typeof parsed.name !== "string" || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+        throw new Error("Choose a workflow JSON file with name, nodes, and edges.");
+      }
+      const definition: CreateWorkflowRequest = {
+        name: parsed.name,
+        description: typeof parsed.description === "string" ? parsed.description : "",
+        nodes: parsed.nodes as CreateWorkflowRequest["nodes"],
+        edges: parsed.edges as CreateWorkflowRequest["edges"],
+      };
+      const imported = await api.workflows.import(definition);
+      useWorkflowStore.getState().hydrate(imported);
+      router.replace(`/workflows/${encodeURIComponent(imported.id)}`);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Unable to import workflow.";
+      useWorkflowStore.getState().setError(message);
+    }
+  }, [router]);
+
+  const handleExport = useCallback(() => {
+    const state = useWorkflowStore.getState();
+    const definition = sanitizeExport({
+      exportFormatVersion: 1,
+      name: state.name,
+      description: state.description,
+      version: state.version,
+      nodes: state.nodes,
+      edges: state.edges,
+      requiredTools: Array.from(new Set(state.nodes.flatMap((node) =>
+        node.type === "tool" && node.data.toolKind ? [`builtin:${node.data.toolKind}`] : [],
+      ))),
+    });
+    const blob = new Blob([JSON.stringify(definition, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${safeFileName(state.name)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
   const handleRetry = useCallback(async () => {
     if (isRunning) return;
@@ -1029,9 +1119,13 @@ export default function WorkflowBuilder({
     <section className="flex h-screen flex-col bg-[#05070b] text-white">
       <WorkflowToolbar
         workflowName={name}
+        workflowId={savedWorkflowId}
         onSave={handleSave}
         onValidate={handleValidate}
+        onCancel={() => void cancelExecution().catch(() => undefined)}
         onRun={handleRun}
+        onImport={handleImport}
+        onExport={handleExport}
         executionStatus={executionStatus}
       />
 
@@ -1074,6 +1168,25 @@ export default function WorkflowBuilder({
         <div className="border-b border-red-500/20 bg-red-500/10 px-5 py-2 text-xs text-red-300">
           {error}
         </div>
+      )}
+
+      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+        <section aria-label="Workflow validation results" className="max-h-36 overflow-y-auto border-b border-amber-300/15 bg-slate-950/90 px-5 py-3">
+          {validationErrors.length > 0 && <>
+            <h2 className="mb-2 font-mono text-[10px] tracking-wider text-rose-300">VALIDATION ERRORS · {validationErrors.length}</h2>
+            <ul className="space-y-1 text-xs text-rose-200">
+              {validationErrors.map((issue, index) => (
+                <li key={`${issue.code}-${issue.nodeId ?? issue.edgeId ?? index}`}>
+                  {issue.nodeId ? <button type="button" className="text-left underline decoration-rose-300/30 underline-offset-2" onClick={() => selectNode(issue.nodeId!)}>{issue.message}</button> : issue.message}
+                </li>
+              ))}
+            </ul>
+          </>}
+          {validationWarnings.length > 0 && <>
+            <h2 className="mb-2 mt-3 font-mono text-[10px] tracking-wider text-amber-200">WARNINGS · {validationWarnings.length}</h2>
+            <ul className="space-y-1 text-xs text-amber-100/80">{validationWarnings.map((issue, index) => <li key={`${issue.code}-${issue.nodeId ?? issue.edgeId ?? index}`}>{issue.message}</li>)}</ul>
+          </>}
+        </section>
       )}
 
       {executionStatus === "WAITING_APPROVAL" && executionId && executionDetails?.approvals
@@ -1129,6 +1242,49 @@ export default function WorkflowBuilder({
           Saving workflow...
         </div>
       )}
+
+      {showRunDialog && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="run-workflow-title" className="w-full max-w-2xl rounded-xl border border-white/15 bg-slate-950 p-5 shadow-2xl">
+            <h2 id="run-workflow-title" className="text-lg font-semibold text-white">Run workflow</h2>
+            <p className="mt-1 text-sm text-slate-400">Provide a JSON object as the initial workflow input.</p>
+            <textarea
+              autoFocus
+              value={runInputText}
+              onChange={(event) => { setRunInputText(event.target.value); setRunInputError(null); }}
+              rows={10}
+              spellCheck={false}
+              className="mt-4 w-full rounded-lg border border-white/10 bg-black/50 p-3 font-mono text-xs text-slate-100 outline-none focus:border-cyan-400"
+              aria-label="Workflow runtime input JSON"
+            />
+            {runInputError && <p role="alert" className="mt-2 text-sm text-rose-300">{runInputError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" disabled={isRunning} onClick={() => setShowRunDialog(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={isRunning} onClick={() => void handleRunSubmit()} className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-100 disabled:opacity-50">{isRunning ? "Starting…" : "Start run"}</button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeExport(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeExport);
+  if (!isRecord(value)) return value;
+  const safe: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (/(?:api.?key|access.?token|refresh.?token|secret|password|credential)/i.test(key)) continue;
+    safe[key] = sanitizeExport(child);
+  }
+  return safe;
+}
+
+function safeFileName(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return normalized.slice(0, 64) || "workflow";
 }

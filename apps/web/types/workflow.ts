@@ -12,11 +12,10 @@ export type WorkflowNodeType =
   | "tool";
 
 export type WorkflowToolKind =
-  | "http"
-  | "search"
-  | "calculator"
-  | "database"
-  | "code";
+  | "text"
+  | "json"
+  | "date"
+  | "calculator";
 
 export type WorkflowConditionOperator =
   | "exists"
@@ -49,12 +48,21 @@ export interface WorkflowNodeData {
   description: string;
   category: string;
   status?: "idle" | "queued" | "running" | "completed" | "error" | "skipped";
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   toolKind?: WorkflowToolKind;
   endpoint?: string;
   method?: "GET" | "POST";
   searchQuery?: string;
   maxResults?: number;
   expression?: string;
+  toolOperation?: string;
+  inputPath?: string;
+  endDatePath?: string;
+  days?: number;
+  searchText?: string;
+  replaceText?: string;
+  fieldPath?: string;
   databaseTable?: string;
   databaseQuery?: string;
   language?: string;
@@ -66,7 +74,10 @@ export interface WorkflowNodeData {
   provider?: string;
   instructions?: string;
   temperature?: number;
+  thinkingLevel?: "low" | "medium" | "high";
   maxTokens?: number;
+  timeoutMs?: number;
+  maxRetries?: number;
   maxIterations?: number;
   tools?: string[];
   memory?: boolean;
@@ -158,18 +169,84 @@ export interface WorkflowExecution {
   completedAt?: string
   error?: string;
   output?: Record<string, unknown>;
+  createdAt?: string;
+  traceId?: string | null;
+  input?: unknown;
+  workflowVersion?: { version: number; snapshot?: unknown };
   steps?: Array<{
     id: string;
     nodeId: string;
     nodeType: string;
     status: string;
+    input?: unknown;
     output?: unknown;
     error?: string | null;
+    retryCount?: number;
+    durationMs?: number | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    usage?: unknown;
   }>;
   approvals?: Array<{
     id: string;
     status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
     comment?: string | null;
+  }>;
+}
+
+export interface WorkflowExecutionSummary {
+  id: string;
+  status: ExecutionStatus;
+  input?: unknown;
+  output?: unknown;
+  error?: string | null;
+  traceId?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  workflowVersion?: { version: number } | null;
+  _count?: { steps: number };
+}
+
+export interface WorkflowExecutionHistoryPage {
+  items: WorkflowExecutionSummary[];
+  nextCursor: string | null;
+}
+
+export interface PendingApproval {
+  id: string;
+  executionId: string;
+  requestedAt: string;
+  decision?: unknown;
+  step?: { nodeId: string; nodeType: string; input?: unknown } | null;
+  execution: {
+    id: string;
+    status: string;
+    traceId?: string | null;
+    workflow: { id: string; name: string };
+    workflowVersion?: { version: number } | null;
+  };
+}
+
+export interface DashboardOverview {
+  workflowCount: number;
+  executionCount: number;
+  statuses: Record<string, number>;
+  successRate: number | null;
+  recentUsage: { inputTokens: number; outputTokens: number; totalTokens: number };
+  recentExecutions: Array<{
+    id: string;
+    workflowId: string;
+    workflowName: string;
+    status: string;
+    traceId: string | null;
+    version: number | null;
+    createdAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+    durationMs: number | null;
+    error: string | null;
+    stepCount: number;
   }>;
 }
 

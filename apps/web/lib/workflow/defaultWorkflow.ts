@@ -32,7 +32,7 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "Gemini",
+      model: "gemini-3.8-flash",
 
       instructions:
         "Analyze the user request and create a structured execution plan.",
@@ -56,7 +56,7 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "Gemini",
+      model: "gemini-3.8-flash",
 
       instructions:
         "Research the required information and return reliable findings.",
@@ -80,7 +80,7 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "Gemini",
+      model: "gemini-3.8-flash",
 
       instructions:
         "Implement the requested solution using clean production-quality code.",
@@ -104,7 +104,7 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "Gemini",
+      model: "gemini-3.8-flash",
 
       instructions:
         "Review the result for correctness, quality and security.",

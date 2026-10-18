@@ -1,3 +1,5 @@
+import { inputSchemaDefinitionError } from "../executions/input-schema";
+
 export interface GraphValidationIssue {
   code: string;
   message: string;
@@ -23,13 +25,19 @@ const SUPPORTED_NODE_TYPES = new Set([
 ]);
 
 const TOOL_KINDS = new Set([
-  "http",
-  "search",
   "calculator",
-  "database",
-  "code",
+  "text",
+  "json",
+  "date",
 ]);
 const AGENT_TYPES = new Set(["support", "planner", "research", "coding", "reviewer"]);
+const AGENT_MODELS = new Set([
+  "Gemini",
+  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
+  "gpt-5.5",
+  "gpt-6-astra",
+]);
 
 export function validateWorkflowGraph(
   nodes: unknown[],
@@ -83,6 +91,14 @@ export function validateWorkflowGraph(
     if (!isRecord(item.data)) {
       errors.push({ code: "INVALID_NODE_DATA", message: `Node "${nodeId}" data must be an object.`, nodeId });
     }
+    if (nodeType === "input" && isRecord(item.data) && item.data.inputSchema !== undefined) {
+      const schemaError = inputSchemaDefinitionError(item.data.inputSchema);
+      if (schemaError) errors.push({ code: "INVALID_INPUT_SCHEMA", message: `Input node "${nodeId}": ${schemaError}`, nodeId });
+    }
+    if (isRecord(item.data) && item.data.outputSchema !== undefined) {
+      const schemaError = inputSchemaDefinitionError(item.data.outputSchema);
+      if (schemaError) errors.push({ code: "INVALID_OUTPUT_SCHEMA", message: `Node "${nodeId}" output: ${schemaError.replace(/Input node schema/g, "Output schema").replace(/Input schema/g, "Output schema")}`, nodeId });
+    }
     if (
       nodeType === "tool" &&
       isRecord(item.data) &&
@@ -97,6 +113,44 @@ export function validateWorkflowGraph(
     if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "calculator" &&
       (typeof item.data.expression !== "string" || !item.data.expression.trim() || item.data.expression.length > 500)) {
       errors.push({ code: "INVALID_CALCULATOR_EXPRESSION", message: `Calculator node "${nodeId}" requires an expression up to 500 characters.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "text" &&
+      !new Set(["trim", "uppercase", "lowercase", "replace"]).has(String(item.data.toolOperation))) {
+      errors.push({ code: "INVALID_TEXT_OPERATION", message: `Text node "${nodeId}" has an unsupported operation.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "json" &&
+      !new Set(["parse", "stringify", "get"]).has(String(item.data.toolOperation))) {
+      errors.push({ code: "INVALID_JSON_OPERATION", message: `JSON node "${nodeId}" has an unsupported operation.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "date" &&
+      !new Set(["now", "addDays", "differenceDays"]).has(String(item.data.toolOperation))) {
+      errors.push({ code: "INVALID_DATE_OPERATION", message: `Date node "${nodeId}" has an unsupported operation.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "json" && item.data.toolOperation === "get" &&
+      (typeof item.data.fieldPath !== "string" || !item.data.fieldPath.trim() || item.data.fieldPath.length > 200)) {
+      errors.push({ code: "INVALID_JSON_PATH", message: `JSON node "${nodeId}" requires a field path up to 200 characters.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind !== "calculator" &&
+      item.data.inputPath !== undefined &&
+      (typeof item.data.inputPath !== "string" || item.data.inputPath.length > 200)) {
+      errors.push({ code: "INVALID_TOOL_INPUT_PATH", message: `Tool node "${nodeId}" input path must be a string up to 200 characters.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "date" && item.data.toolOperation !== "now" &&
+      (typeof item.data.inputPath !== "string" || !item.data.inputPath.trim())) {
+      errors.push({ code: "MISSING_DATE_INPUT_PATH", message: `Date node "${nodeId}" requires a start-date input path.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "date" && item.data.toolOperation === "addDays" &&
+      (!Number.isFinite(Number(item.data.days)) || Math.abs(Number(item.data.days)) > 36_500)) {
+      errors.push({ code: "INVALID_DATE_OFFSET", message: `Date node "${nodeId}" requires a finite offset within 100 years.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "date" && item.data.toolOperation === "differenceDays" &&
+      (typeof item.data.endDatePath !== "string" || !item.data.endDatePath.trim() || item.data.endDatePath.length > 200)) {
+      errors.push({ code: "INVALID_END_DATE_PATH", message: `Date node "${nodeId}" requires an end-date path up to 200 characters.`, nodeId });
+    }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "text" && item.data.toolOperation === "replace" &&
+      (typeof item.data.searchText !== "string" || !item.data.searchText || item.data.searchText.length > 1000 ||
+        (item.data.replaceText !== undefined && (typeof item.data.replaceText !== "string" || item.data.replaceText.length > 1000)))) {
+      errors.push({ code: "INVALID_TEXT_REPLACEMENT", message: `Text replace node "${nodeId}" requires bounded search and replacement text.`, nodeId });
     }
     if (nodeType === "condition" && isRecord(item.data)) {
       const operators = new Set(["exists", "truthy", "equals", "notEquals", "contains", "greaterThan", "lessThan"]);
@@ -113,6 +167,34 @@ export function validateWorkflowGraph(
       (typeof item.data.agentType !== "string" || !AGENT_TYPES.has(item.data.agentType))
     ) {
       errors.push({ code: "UNSUPPORTED_AGENT_TYPE", message: `Node "${nodeId}" has an unsupported agent type.`, nodeId });
+    }
+    if (["agent", "llm", "reviewer"].includes(String(nodeType)) && isRecord(item.data)) {
+      if (item.data.inputPath !== undefined &&
+        (typeof item.data.inputPath !== "string" || item.data.inputPath.length > 200)) {
+        errors.push({ code: "INVALID_AGENT_INPUT_PATH", message: `Node "${nodeId}" input mapping must be a path up to 200 characters.`, nodeId });
+      }
+      if (item.data.model !== undefined && (typeof item.data.model !== "string" || !AGENT_MODELS.has(item.data.model))) {
+        errors.push({ code: "UNSUPPORTED_AGENT_MODEL", message: `Node "${nodeId}" must use a supported OpenAI or Gemini model.`, nodeId });
+      }
+      if (item.data.temperature !== undefined &&
+        (typeof item.data.temperature !== "number" || !Number.isFinite(item.data.temperature) || item.data.temperature < 0 || item.data.temperature > 1)) {
+        errors.push({ code: "INVALID_AGENT_TEMPERATURE", message: `Node "${nodeId}" temperature must be between 0 and 1.`, nodeId });
+      }
+      if (item.data.thinkingLevel !== undefined && !new Set(["low", "medium", "high"]).has(String(item.data.thinkingLevel))) {
+        errors.push({ code: "INVALID_AGENT_THINKING_LEVEL", message: `Node "${nodeId}" thinking level must be low, medium, or high.`, nodeId });
+      }
+      if (item.data.maxTokens !== undefined &&
+        (!Number.isInteger(item.data.maxTokens) || Number(item.data.maxTokens) < 64 || Number(item.data.maxTokens) > 4096)) {
+        errors.push({ code: "INVALID_AGENT_MAX_TOKENS", message: `Node "${nodeId}" output tokens must be between 64 and 4096.`, nodeId });
+      }
+      if (item.data.timeoutMs !== undefined &&
+        (!Number.isInteger(item.data.timeoutMs) || Number(item.data.timeoutMs) < 1_000 || Number(item.data.timeoutMs) > 60_000)) {
+        errors.push({ code: "INVALID_AGENT_TIMEOUT", message: `Node "${nodeId}" timeout must be between 1000 and 60000 milliseconds.`, nodeId });
+      }
+      if (item.data.maxRetries !== undefined &&
+        (!Number.isInteger(item.data.maxRetries) || Number(item.data.maxRetries) < 0 || Number(item.data.maxRetries) > 3)) {
+        errors.push({ code: "INVALID_AGENT_RETRIES", message: `Node "${nodeId}" retries must be an integer from 0 to 3.`, nodeId });
+      }
     }
     if (
       isRecord(item.data) && item.data.instructions !== undefined &&

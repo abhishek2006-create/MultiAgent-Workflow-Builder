@@ -1,20 +1,15 @@
 {
   "name": "retail-support-workflow-builder",
   "private": true,
-<<<<<<< HEAD
   "workspaces": [
     "apps/web",
     "apps/api",
     "packages/contracts"
   ],
-=======
-  "workspaces": ["apps/api", "packages/contracts"],
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
   "scripts": {
     "dev:api": "npm --workspace apps/api run start:dev",
     "build:api": "npm --workspace apps/api run build",
     "prisma:generate": "npm --workspace apps/api run prisma:generate",
-<<<<<<< HEAD
     "prisma:migrate": "npm --workspace apps/api run prisma:migrate",
     "db:migrate:deploy": "npm --workspace apps/api run db:migrate:deploy",
     "db:up": "docker compose -f docker-compose.db.yml up -d --wait",
@@ -22,8 +17,5 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3"
-=======
-    "prisma:migrate": "npm --workspace apps/api run prisma:migrate"
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
   }
 }

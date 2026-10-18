@@ -6,10 +6,11 @@ import { ExecutionsService } from "./executions.service";
 import { AiModule } from "../ai/ai.module";
 import { ExecutionWorkerService } from "./execution-worker.service";
 import { ApprovalsController } from "./approvals.controller";
+import { PendingApprovalsController } from "./pending-approvals.controller";
 
 @Module({
   imports: [AuthModule, WorkflowsModule, AiModule],
-  controllers: [ExecutionsController, ApprovalsController],
+  controllers: [ExecutionsController, ApprovalsController, PendingApprovalsController],
   providers: [ExecutionsService, ExecutionWorkerService],
 })
 export class ExecutionsModule {}

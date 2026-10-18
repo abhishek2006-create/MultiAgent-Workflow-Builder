@@ -170,15 +170,7 @@ export function useWorkflowApi() {
             workflowId,
           );
 
-        setValidationResult(
-          result.errors.map(
-            (error) => error.message,
-          ),
-          result.warnings.map(
-            (warning) =>
-              warning.message,
-          ),
-        );
+        setValidationResult(result.errors, result.warnings);
 
         return result;
       } catch (error) {
@@ -197,7 +189,7 @@ export function useWorkflowApi() {
     ]);
 
   const runWorkflow =
-    useCallback(async () => {
+    useCallback(async (input: Record<string, unknown> = {}) => {
       const state =
         useWorkflowStore.getState();
 
@@ -219,7 +211,7 @@ export function useWorkflowApi() {
         const result =
           await api.workflows.run(
             state.workflowId,
-            {},
+            { input },
           );
 
         setExecution(
@@ -282,6 +274,20 @@ export function useWorkflowApi() {
     }
   }, [monitorExecution, setError, setExecution, setExecutionDetails]);
 
+  const cancelExecution = useCallback(async () => {
+    const state = useWorkflowStore.getState();
+    if (!state.executionId) throw new Error("No active execution to cancel.");
+    setError(null);
+    try {
+      await api.executions.cancel(state.executionId);
+      setExecution(state.executionId, "CANCELLED");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to cancel execution.";
+      setError(message);
+      throw error;
+    }
+  }, [setError, setExecution]);
+
   return {
     loadWorkflow,
     saveWorkflow,
@@ -289,5 +295,6 @@ export function useWorkflowApi() {
     runWorkflow,
     resolveApproval,
     retryExecution,
+    cancelExecution,
   };
 }

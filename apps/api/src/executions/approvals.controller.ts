@@ -12,7 +12,6 @@ export class ApprovalsController {
 
   @Post(":approvalId/resolve")
   @UseGuards(WorkspaceRolesGuard)
-  @UseGuards(WorkspaceRolesGuard)
   @SetMetadata(WORKSPACE_ROLES_KEY, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.MEMBER])
   async resolve(
     @Req() request: AuthenticatedRequest,

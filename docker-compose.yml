@@ -23,13 +23,9 @@ services:
       API_PORT: 3001
       DATABASE_URL: "postgresql://${POSTGRES_USER:-workflow}:${POSTGRES_PASSWORD:-local_dev_only}@postgres:5432/${POSTGRES_DB:-workflow_builder}?schema=public"
       AI_SERVICE_URL: http://ai:8000
-<<<<<<< HEAD
       AI_SERVICE_SECRET: ${AI_SERVICE_SECRET:?Set AI_SERVICE_SECRET in your environment}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
-=======
-      JWT_SECRET: ${JWT_SECRET:-local_dev_only_change_this_secret}
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
     ports:
       - "3001:3001"
     depends_on:
@@ -43,14 +39,14 @@ services:
       context: apps/ai
     environment:
       AI_PORT: 8000
-<<<<<<< HEAD
       AI_SERVICE_SECRET: ${AI_SERVICE_SECRET:?Set AI_SERVICE_SECRET in your environment}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in your environment}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
-=======
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
+      GEMINI_ALLOWED_MODELS: ${GEMINI_ALLOWED_MODELS:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
+      OPENAI_ALLOWED_MODELS: ${OPENAI_ALLOWED_MODELS:-}
+      AI_PROVIDER_TIMEOUT_MS: ${AI_PROVIDER_TIMEOUT_MS:-20000}
     ports:
       - "8000:8000"
 

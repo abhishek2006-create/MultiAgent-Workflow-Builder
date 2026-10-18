@@ -3,8 +3,12 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { AiClientService } from "../ai/ai-client.service";
-import { calculateExpression, evaluateCondition } from "./node-runtime";
+import { evaluateCondition } from "./node-runtime";
 import { resolveAgentType } from "./agent-types";
+import { executeBuiltInTool, resolveInputPath, type BuiltInToolKind } from "./tool-registry";
+import { readyGraphNodes } from "./graph-scheduler";
+import { jsonSchemaValueErrors } from "./input-schema";
+import { configuredNodeRetries, isRetryableNodeError, nodeRetryDelayMs } from "./node-retry";
 
 type GraphNode = { id: string; type: string; data?: Record<string, unknown> };
 type GraphEdge = { source: string; target: string; sourceHandle?: string | null };
@@ -17,6 +21,7 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly workerId = randomUUID();
   private readonly leaseDurationMs = 60_000;
   private readonly heartbeatIntervalMs = 10_000;
+  private readonly nodeConcurrency = 4;
 
   constructor(private readonly prisma: PrismaService, private readonly ai: AiClientService) {}
 
@@ -102,99 +107,158 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
       const nodesById = new Map(nodes.map((node) => [node.id, node]));
       const outputs = new Map<string, unknown>();
       const runInput = asRecord(execution.input);
+      const processed = new Set<string>();
+      for (const [nodeId, step] of previousSteps) {
+        if (step.status === "COMPLETED") {
+          outputs.set(nodeId, step.output);
+          processed.add(nodeId);
+        } else if (step.status === "SKIPPED") {
+          processed.add(nodeId);
+        }
+      }
 
-      for (const node of ordered) {
+      while (processed.size < ordered.length) {
+        if (leaseLost) throw new LostExecutionLeaseError();
+        const ready = readyGraphNodes(ordered, edges, processed, this.nodeConcurrency);
+        if (ready.length === 0) throw new Error("Execution graph has nodes with unresolved dependencies");
+        const readyWithoutApproval = ready.filter((node) => node.type !== "approval");
+
+        if (readyWithoutApproval.length > 0) {
+          const runnable: GraphNode[] = [];
+          for (const node of readyWithoutApproval) {
+            const allIncoming = edges.filter((edge) => edge.target === node.id);
+            const incoming = this.activeIncomingEdges(allIncoming, nodesById, outputs);
+            if (allIncoming.length > 0 && incoming.length === 0) {
+              await this.persistSkippedStep(executionId, node);
+              processed.add(node.id);
+              continue;
+            }
+            runnable.push(node);
+          }
+
+          const results = await Promise.allSettled(runnable.map(async (node) => {
+            const allIncoming = edges.filter((edge) => edge.target === node.id);
+            const incoming = this.activeIncomingEdges(allIncoming, nodesById, outputs);
+            const nodeInput = incoming.length === 0
+              ? runInput
+              : Object.fromEntries(incoming.map((edge) => [edge.source, outputs.get(edge.source)]));
+            const startedAt = new Date();
+            const maxRetries = configuredNodeRetries(node.data);
+            const step = await this.withLease(executionId, (tx) => tx.workflowExecutionStep.upsert({
+              where: { executionId_nodeId: { executionId, nodeId: node.id } },
+              create: {
+                executionId,
+                nodeId: node.id,
+                nodeType: node.type,
+                status: "RUNNING",
+                input: jsonValue(nodeInput),
+                startedAt,
+              },
+              update: {
+                nodeType: node.type,
+                status: "RUNNING",
+                input: jsonValue(nodeInput),
+                error: null,
+                startedAt,
+                completedAt: null,
+              },
+            }));
+
+            for (let attempt = step.retryCount; ; attempt += 1) {
+              if (leaseLost) throw new LostExecutionLeaseError();
+              await this.withLease(executionId, (tx) => tx.workflowExecutionStep.update({
+                where: { id: step.id },
+                data: { retryCount: attempt },
+              }));
+              try {
+                const value = await this.executeNode(node, nodeInput, runInput);
+                if (node.data?.outputSchema !== undefined) {
+                  const validationErrors = jsonSchemaValueErrors(value, node.data.outputSchema);
+                  if (validationErrors.length > 0) {
+                    throw new Error(`Output does not match the configured schema: ${validationErrors.join("; ")}`);
+                  }
+                }
+                await this.withLease(executionId, (tx) => tx.workflowExecutionStep.update({
+                  where: { id: step.id },
+                  data: {
+                    status: "COMPLETED",
+                    output: jsonValue(value),
+                    error: null,
+                    usage: isRecord(value) && isRecord(value.usage)
+                      ? jsonValue(value.usage)
+                      : Prisma.DbNull,
+                    completedAt: new Date(),
+                    durationMs: Date.now() - startedAt.getTime(),
+                  },
+                }));
+                return { nodeId: node.id, value };
+              } catch (error) {
+                if (error instanceof LostExecutionLeaseError) throw error;
+                const message = error instanceof Error ? error.message : "Node execution failed";
+                const canRetry = attempt < maxRetries && isRetryableNodeError(error, node.type);
+                if (canRetry) {
+                  await this.withLease(executionId, (tx) => tx.workflowExecutionStep.update({
+                    where: { id: step.id },
+                    data: { retryCount: attempt + 1, error: `Attempt ${attempt + 1} failed; retrying: ${message}`.slice(0, 2000) },
+                  }));
+                  await new Promise((resolve) => setTimeout(resolve, nodeRetryDelayMs(attempt)));
+                  continue;
+                }
+                await this.withLease(executionId, (tx) => tx.workflowExecutionStep.updateMany({
+                  where: { id: step.id, status: "RUNNING" },
+                  data: { status: "FAILED", retryCount: attempt, error: message.slice(0, 2000), completedAt: new Date(), durationMs: Date.now() - startedAt.getTime() },
+                }));
+                throw new Error(`Node "${node.id}" failed: ${message}`, { cause: error });
+              }
+            }
+          }));
+
+          const failures: string[] = [];
+          for (let index = 0; index < results.length; index += 1) {
+            const result = results[index];
+            if (result.status === "rejected") {
+              if (result.reason instanceof LostExecutionLeaseError) throw result.reason;
+              activeNodeId ??= runnable[index]?.id;
+              failures.push(result.reason instanceof Error ? result.reason.message : "Node execution failed");
+              continue;
+            }
+            outputs.set(result.value.nodeId, result.value.value);
+            processed.add(result.value.nodeId);
+          }
+          if (failures.length > 0) throw new Error(failures.join("; ").slice(0, 2000));
+          continue;
+        }
+
+        const node = ready[0];
         if (leaseLost) throw new LostExecutionLeaseError();
         activeNodeId = node.id;
-        const prior = previousSteps.get(node.id);
-        if (prior?.status === "COMPLETED") {
-          outputs.set(node.id, prior.output);
-          continue;
-        }
-        if (prior?.status === "SKIPPED") continue;
         const allIncoming = edges.filter((edge) => edge.target === node.id);
-        const incoming = allIncoming.filter((edge) => {
-          const source = nodesById.get(edge.source);
-          const sourceValue = outputs.get(edge.source);
-          if (source?.type === "condition") {
-            const branch = asRecord(sourceValue).branch;
-            return branch === "true" || branch === "false"
-              ? edge.sourceHandle === branch
-              : false;
-          }
-          return outputs.has(edge.source);
-        });
-        if (allIncoming.length > 0 && incoming.length === 0) {
-          const skippedAt = new Date();
-          const skipped = await this.withLease(executionId, (tx) => tx.workflowExecutionStep.upsert({
-            where: { executionId_nodeId: { executionId, nodeId: node.id } },
-            create: {
-              executionId,
-              nodeId: node.id,
-              nodeType: node.type,
-              status: "SKIPPED",
-              input: {},
-              startedAt: skippedAt,
-              completedAt: skippedAt,
-            },
-            update: { nodeType: node.type, status: "SKIPPED", input: {}, output: Prisma.DbNull, error: null, startedAt: skippedAt, completedAt: skippedAt },
-          }));
-          previousSteps.set(node.id, skipped);
-          continue;
-        }
+        const incoming = this.activeIncomingEdges(allIncoming, nodesById, outputs);
         const nodeInput = incoming.length === 0
           ? runInput
           : Object.fromEntries(incoming.map((edge) => [edge.source, outputs.get(edge.source)]));
         const startedAt = new Date();
         const step = await this.withLease(executionId, (tx) => tx.workflowExecutionStep.upsert({
           where: { executionId_nodeId: { executionId, nodeId: node.id } },
-          create: {
-            executionId,
-            nodeId: node.id,
-            nodeType: node.type,
-            status: "RUNNING",
-            input: jsonValue(nodeInput),
-            startedAt,
-          },
-          update: {
-            nodeType: node.type,
-            status: "RUNNING",
-            input: jsonValue(nodeInput),
-            error: null,
-            startedAt,
-            completedAt: null,
-          },
+          create: { executionId, nodeId: node.id, nodeType: node.type, status: "RUNNING", input: jsonValue(nodeInput), startedAt },
+          update: { nodeType: node.type, status: "RUNNING", input: jsonValue(nodeInput), error: null, startedAt, completedAt: null },
         }));
-
-        if (node.type === "approval") {
-          await this.withLease(executionId, async (tx) => {
-            await tx.workflowExecutionStep.update({
-              where: { id: step.id },
-              data: { status: "WAITING_APPROVAL", completedAt: new Date(), durationMs: Date.now() - startedAt.getTime() },
-            });
-            await tx.approval.create({
-              data: { executionId, stepId: step.id, status: "PENDING", decision: jsonValue(nodeInput) },
-            });
-            await tx.workflowExecution.update({ where: { id: executionId }, data: { status: "WAITING_APPROVAL" } });
-            await tx.executionWorkerLease.deleteMany({ where: { executionId, workerId: this.workerId } });
+        await this.withLease(executionId, async (tx) => {
+          await tx.workflowExecutionStep.update({
+            where: { id: step.id },
+            data: { status: "WAITING_APPROVAL", completedAt: new Date(), durationMs: Date.now() - startedAt.getTime() },
           });
-          return;
-        }
-
-        const value = await this.executeNode(node, nodeInput, runInput);
-        outputs.set(node.id, value);
-        await this.withLease(executionId, (tx) => tx.workflowExecutionStep.update({
-          where: { id: step.id },
-          data: {
-            status: "COMPLETED",
-            output: jsonValue(value),
-            completedAt: new Date(),
-            durationMs: Date.now() - startedAt.getTime(),
-          },
-        }));
+          await tx.approval.create({
+            data: { executionId, stepId: step.id, status: "PENDING", decision: jsonValue(nodeInput) },
+          });
+          await tx.workflowExecution.update({ where: { id: executionId }, data: { status: "WAITING_APPROVAL" } });
+          await tx.executionWorkerLease.deleteMany({ where: { executionId, workerId: this.workerId } });
+        });
+        return;
       }
 
-      const outputNodes = ordered.filter((node) => node.type === "output");
+      const outputNodes = ordered.filter((node) => node.type === "output" && outputs.has(node.id));
+      if (outputNodes.length === 0) throw new Error("Workflow completed without producing an output");
       const finalOutput = outputNodes.length === 1
         ? outputs.get(outputNodes[0].id)
         : Object.fromEntries(outputNodes.map((node) => [node.id, outputs.get(node.id)]));
@@ -258,26 +322,79 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
       case "llm":
       case "reviewer": {
         const data = node.data ?? {};
+        const mappedInput = typeof data.inputPath === "string" && data.inputPath.trim()
+          ? resolveInputPath(input, data.inputPath)
+          : input;
+        if (mappedInput === undefined) throw new Error(`AI node "${node.id}" input mapping did not resolve`);
         const message = typeof data.instructions === "string" && data.instructions.trim()
-          ? `${data.instructions.trim()}\n\nWorkflow input:\n${JSON.stringify(input)}`
-          : JSON.stringify(input);
+          ? `${data.instructions.trim()}\n\nWorkflow input:\n${JSON.stringify(mappedInput)}`
+          : JSON.stringify(mappedInput);
+        if (message.length > 8_000) throw new Error("AI node input must be 8,000 characters or smaller");
         const agentType = resolveAgentType(node.type, data);
-        const result = await this.ai.support({ customer_message: message, agent_type: agentType });
+        const selectedModel = data.model === "Gemini" ? "gemini-3.8-flash" : data.model;
+        const result = await this.ai.support({
+          customer_message: message,
+          agent_type: agentType,
+          ...(typeof selectedModel === "string" && /^(gemini|gpt)-/.test(selectedModel) ? { model: selectedModel } : {}),
+          ...(typeof data.temperature === "number" ? { temperature: data.temperature } : {}),
+          ...(typeof data.thinkingLevel === "string" ? { thinking_level: data.thinkingLevel as "low" | "medium" | "high" } : {}),
+          ...(typeof data.maxTokens === "number" ? { max_output_tokens: data.maxTokens } : {}),
+          ...(typeof data.timeoutMs === "number" ? { timeout_ms: data.timeoutMs } : {}),
+        });
         return { ...result, content: result.message };
       }
       case "condition":
         return evaluateCondition(node.data ?? {}, input);
       case "tool": {
         const toolKind = node.data?.toolKind;
-        if (toolKind === "calculator") {
-          const expression = typeof node.data?.expression === "string" ? node.data.expression : "";
-          return { value: calculateExpression(expression, input) };
+        if (!["calculator", "text", "json", "date"].includes(String(toolKind))) {
+          throw new Error(`Tool kind "${String(toolKind ?? "unknown")}" is not enabled`);
         }
-        throw new Error(`Tool kind "${String(toolKind ?? "unknown")}" is not executable yet`);
+        return executeBuiltInTool(toolKind as BuiltInToolKind, node.data ?? {}, input);
       }
       default:
         throw new Error(`Node type "${node.type}" is not executable yet`);
     }
+  }
+
+  private activeIncomingEdges(
+    edges: GraphEdge[],
+    nodesById: Map<string, GraphNode>,
+    outputs: Map<string, unknown>,
+  ): GraphEdge[] {
+    return edges.filter((edge) => {
+      const source = nodesById.get(edge.source);
+      if (source?.type === "condition") {
+        const branch = asRecord(outputs.get(edge.source)).branch;
+        return (branch === "true" || branch === "false") && edge.sourceHandle === branch;
+      }
+      return outputs.has(edge.source);
+    });
+  }
+
+  private async persistSkippedStep(executionId: string, node: GraphNode): Promise<void> {
+    const skippedAt = new Date();
+    await this.withLease(executionId, (tx) => tx.workflowExecutionStep.upsert({
+      where: { executionId_nodeId: { executionId, nodeId: node.id } },
+      create: {
+        executionId,
+        nodeId: node.id,
+        nodeType: node.type,
+        status: "SKIPPED",
+        input: {},
+        startedAt: skippedAt,
+        completedAt: skippedAt,
+      },
+      update: {
+        nodeType: node.type,
+        status: "SKIPPED",
+        input: {},
+        output: Prisma.DbNull,
+        error: null,
+        startedAt: skippedAt,
+        completedAt: skippedAt,
+      },
+    }));
   }
 }
 
@@ -310,6 +427,10 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
