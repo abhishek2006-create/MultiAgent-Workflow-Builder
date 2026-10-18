@@ -84,6 +84,15 @@ export function TopNav() {
             <Link className="tab" href="/dashboard">
               Dashboard
             </Link>
+            <Link className="tab" href="/workflows">
+              Workflows
+            </Link>
+            <Link className="tab" href="/templates">
+              Templates
+            </Link>
+            <Link className="tab" href="/approvals">
+              Approvals
+            </Link>
             <Link className="tab" href="/workflows/demo">
               Workflow builder
             </Link>

@@ -23,6 +23,8 @@ import type {
   WorkflowNode,
   WorkflowNodeData,
   WorkflowExecution,
+  WorkflowValidationError,
+  WorkflowValidationWarning,
   WorkflowStatus,
 } from "../types/workflow";
 
@@ -31,6 +33,7 @@ export interface WorkflowStore {
   name: string;
   description: string;
   status: WorkflowStatus;
+  version: number;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   selectedNodeId: string | null;
@@ -40,8 +43,8 @@ export interface WorkflowStore {
   executionId: string | null;
   executionStatus: ExecutionStatus;
   executionDetails: WorkflowExecution | null;
-  validationErrors: string[];
-  validationWarnings: string[];
+  validationErrors: WorkflowValidationError[];
+  validationWarnings: WorkflowValidationWarning[];
   error: string | null;
 
   setWorkflowMetadata: (
@@ -72,7 +75,7 @@ export interface WorkflowStore {
   markClean: () => void;
   markDirty: () => void;
 
-  setValidationResult: (errors: string[], warnings: string[]) => void;
+  setValidationResult: (errors: WorkflowValidationError[], warnings: WorkflowValidationWarning[]) => void;
 
   clearValidation: () => void;
 
@@ -87,6 +90,7 @@ const initialState: Omit<WorkflowStore, "setWorkflowMetadata" | "setWorkflowId" 
   name: "Untitled Workflow",
   description: "",
   status: "DRAFT" as WorkflowStatus,
+  version: 1,
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -101,7 +105,7 @@ const initialState: Omit<WorkflowStore, "setWorkflowMetadata" | "setWorkflowId" 
   error: null,
 };
 
-export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
+export const useWorkflowStore = create<WorkflowStore>((set) => ({
   ...initialState,
 
   setWorkflowMetadata: (data) => {
@@ -304,6 +308,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       name: workflow.name,
       description: workflow.description,
       status: workflow.status,
+      version: workflow.version,
       nodes: workflow.nodes,
       edges: workflow.edges,
       selectedNodeId: null,

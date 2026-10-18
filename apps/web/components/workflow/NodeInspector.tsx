@@ -1,6 +1,7 @@
 "use client";
 
 import type { Node } from "@xyflow/react";
+import { useEffect, useState } from "react";
 import type { WorkflowNodeData } from "../../types/workflow";
 
 interface NodeInspectorProps {
@@ -12,6 +13,19 @@ export default function NodeInspector({
   node,
   onUpdate,
 }: NodeInspectorProps) {
+  const [inputSchemaText, setInputSchemaText] = useState("");
+  const [inputSchemaError, setInputSchemaError] = useState<string | null>(null);
+  const [outputSchemaText, setOutputSchemaText] = useState("");
+  const [outputSchemaError, setOutputSchemaError] = useState<string | null>(null);
+  useEffect(() => {
+    setInputSchemaText(node?.type === "input" && node.data.inputSchema
+      ? JSON.stringify(node.data.inputSchema, null, 2)
+      : "");
+    setInputSchemaError(null);
+    setOutputSchemaText(node?.data.outputSchema ? JSON.stringify(node.data.outputSchema, null, 2) : "");
+    setOutputSchemaError(null);
+  }, [node?.id, node?.type, node?.data.inputSchema, node?.data.outputSchema]);
+
   if (!node) {
     return (
       <aside className="w-[290px] shrink-0 border-l border-white/10 bg-slate-950/40 p-5">
@@ -27,6 +41,7 @@ export default function NodeInspector({
   }
 
   const data = node.data;
+  const selectedModel = data.model ?? "gemini-3.8-flash";
 
   return (
     <aside className="w-[290px] shrink-0 overflow-y-auto border-l border-white/10 bg-slate-950/40 p-5">
@@ -59,79 +74,96 @@ export default function NodeInspector({
         />
       </div>
 
+      {node.type === "input" && (
+        <div className="mb-5 border-t border-white/10 pt-4">
+          <label className="mb-2 block text-xs text-slate-400" htmlFor="input-schema">Runtime input schema (JSON Schema)</label>
+          <textarea
+            id="input-schema"
+            value={inputSchemaText}
+            onChange={(event) => {
+              const text = event.target.value;
+              setInputSchemaText(text);
+              if (!text.trim()) {
+                onUpdate({ inputSchema: undefined });
+                setInputSchemaError(null);
+                return;
+              }
+              try {
+                const parsed: unknown = JSON.parse(text);
+                if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("Schema must be a JSON object.");
+                onUpdate({ inputSchema: parsed as Record<string, unknown> });
+                setInputSchemaError(null);
+              } catch (cause) {
+                setInputSchemaError(cause instanceof Error ? cause.message : "Schema JSON is invalid.");
+              }
+            }}
+            rows={8}
+            spellCheck={false}
+            placeholder={'{\n  "type": "object",\n  "required": ["message"],\n  "properties": { "message": { "type": "string" } }\n}'}
+            className="w-full rounded-lg border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-slate-100 outline-none focus:border-blue-500"
+          />
+          {inputSchemaError ? <p role="alert" className="mt-2 text-[10px] text-rose-300">{inputSchemaError}</p> : <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Runs are rejected when their input does not match this schema. Leave blank to accept any JSON object.</p>}
+        </div>
+      )}
+
+      {node.type !== "input" && (
+        <div className="mb-5 border-t border-white/10 pt-4">
+          <label className="mb-2 block text-xs text-slate-400" htmlFor="output-schema">Output schema (JSON Schema)</label>
+          <textarea
+            id="output-schema"
+            value={outputSchemaText}
+            onChange={(event) => {
+              const text = event.target.value;
+              setOutputSchemaText(text);
+              if (!text.trim()) {
+                onUpdate({ outputSchema: undefined });
+                setOutputSchemaError(null);
+                return;
+              }
+              try {
+                const parsed: unknown = JSON.parse(text);
+                if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("Schema must be a JSON object.");
+                onUpdate({ outputSchema: parsed as Record<string, unknown> });
+                setOutputSchemaError(null);
+              } catch (cause) {
+                setOutputSchemaError(cause instanceof Error ? cause.message : "Schema JSON is invalid.");
+              }
+            }}
+            rows={6}
+            spellCheck={false}
+            placeholder={'{\n  "type": "object",\n  "required": ["message"],\n  "properties": { "message": { "type": "string" } }\n}'}
+            className="w-full rounded-lg border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-slate-100 outline-none focus:border-blue-500"
+          />
+          {outputSchemaError ? <p role="alert" className="mt-2 text-[10px] text-rose-300">{outputSchemaError}</p> : <p className="mt-2 text-[10px] leading-relaxed text-slate-500">The worker validates this node result before storing it. Leave blank to accept any JSON value.</p>}
+        </div>
+      )}
+
       {node.type === "tool" && (
         <div className="mb-5 space-y-4 border-t border-white/10 pt-4">
           <h4 className="font-mono text-[10px] tracking-[0.16em] text-cyan-400">
             {data.toolKind?.toUpperCase() ?? "TOOL"} SETTINGS
           </h4>
+          <label className="block text-xs text-slate-400" htmlFor="tool-operation">Operation</label>
+          <select
+            id="tool-operation"
+            value={data.toolOperation ?? defaultOperation(data.toolKind)}
+            onChange={(event) => onUpdate({ toolOperation: event.target.value })}
+            className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+          >
+            {operationsFor(data.toolKind).map((operation) => <option key={operation.value} value={operation.value}>{operation.label}</option>)}
+          </select>
 
-          {data.toolKind === "http" && (
-            <>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-method">
-                  Method
-                </label>
-                <select
-                  id="tool-method"
-                  value={data.method ?? "GET"}
-                  onChange={(event) =>
-                    onUpdate({
-                      method: event.target.value === "POST" ? "POST" : "GET",
-                    })
-                  }
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
-                >
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-endpoint">
-                  Request URL
-                </label>
-                <input
-                  id="tool-endpoint"
-                  type="url"
-                  value={data.endpoint ?? ""}
-                  onChange={(event) => onUpdate({ endpoint: event.target.value })}
-                  placeholder="https://api.example.com"
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
-            </>
-          )}
-
-          {data.toolKind === "search" && (
-            <>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-search-query">
-                  Search query
-                </label>
-                <input
-                  id="tool-search-query"
-                  value={data.searchQuery ?? ""}
-                  onChange={(event) => onUpdate({ searchQuery: event.target.value })}
-                  placeholder="What should this search for?"
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-max-results">
-                  Maximum results
-                </label>
-                <input
-                  id="tool-max-results"
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={data.maxResults ?? 5}
-                  onChange={(event) =>
-                    onUpdate({ maxResults: Math.min(50, Math.max(1, Number(event.target.value))) })
-                  }
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
-            </>
+          {data.toolKind !== "calculator" && data.toolKind !== "date" && (
+            <div>
+              <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-input-path">Input field path</label>
+              <input
+                id="tool-input-path"
+                value={data.inputPath ?? ""}
+                onChange={(event) => onUpdate({ inputPath: event.target.value })}
+                placeholder="research.message or input.json"
+                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-blue-500"
+              />
+            </div>
           )}
 
           {data.toolKind === "calculator" && (
@@ -149,66 +181,20 @@ export default function NodeInspector({
             </div>
           )}
 
-          {data.toolKind === "database" && (
+          {data.toolKind === "text" && data.toolOperation === "replace" && (
             <>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-database-table">
-                  Table / collection
-                </label>
-                <input
-                  id="tool-database-table"
-                  value={data.databaseTable ?? ""}
-                  onChange={(event) => onUpdate({ databaseTable: event.target.value })}
-                  placeholder="customers"
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-database-query">
-                  Query
-                </label>
-                <textarea
-                  id="tool-database-query"
-                  rows={4}
-                  value={data.databaseQuery ?? ""}
-                  onChange={(event) => onUpdate({ databaseQuery: event.target.value })}
-                  placeholder="SELECT * FROM customers"
-                  className="w-full resize-y rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
+              <input aria-label="Text to find" value={data.searchText ?? ""} onChange={(event) => onUpdate({ searchText: event.target.value })} placeholder="Text to find" className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-100" />
+              <input aria-label="Replacement text" value={data.replaceText ?? ""} onChange={(event) => onUpdate({ replaceText: event.target.value })} placeholder="Replacement text" className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-100" />
             </>
           )}
-
-          {data.toolKind === "code" && (
+          {data.toolKind === "json" && data.toolOperation === "get" && (
+            <input aria-label="JSON field path" value={data.fieldPath ?? ""} onChange={(event) => onUpdate({ fieldPath: event.target.value })} placeholder="customer.email" className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-100" />
+          )}
+          {data.toolKind === "date" && (
             <>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-language">
-                  Language
-                </label>
-                <select
-                  id="tool-language"
-                  value={data.language ?? "JavaScript"}
-                  onChange={(event) => onUpdate({ language: event.target.value })}
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
-                >
-                  <option>JavaScript</option>
-                  <option>Python</option>
-                  <option>TypeScript</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-xs text-slate-400" htmlFor="tool-code">
-                  Code
-                </label>
-                <textarea
-                  id="tool-code"
-                  rows={6}
-                  value={data.code ?? ""}
-                  onChange={(event) => onUpdate({ code: event.target.value })}
-                  placeholder="// Add the code to execute"
-                  className="w-full resize-y rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
+              <input aria-label="Date field path" value={data.inputPath ?? ""} onChange={(event) => onUpdate({ inputPath: event.target.value })} placeholder="input.startDate" className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-100" />
+              {data.toolOperation === "addDays" && <input aria-label="Days to add" type="number" value={data.days ?? 0} onChange={(event) => onUpdate({ days: Number(event.target.value) })} className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-100" />}
+              {data.toolOperation === "differenceDays" && <input aria-label="End date field path" value={data.endDatePath ?? ""} onChange={(event) => onUpdate({ endDatePath: event.target.value })} placeholder="input.endDate" className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-100" />}
             </>
           )}
         </div>
@@ -270,7 +256,7 @@ export default function NodeInspector({
             </label>
 
             <select
-              value={data.model ?? "Gemini"}
+              value={selectedModel}
               onChange={(e) =>
                 onUpdate({
                   model: e.target.value,
@@ -284,10 +270,97 @@ export default function NodeInspector({
                 focus:border-blue-500
               "
             >
-              <option>Gemini</option>
-              <option>GPT</option>
-              <option>Claude</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
+              <option value="gpt-5.5">GPT-5.5 (OpenAI)</option>
+              <option value="gpt-6-astra">GPT-6 Astra (OpenAI)</option>
             </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="mb-2 block text-xs text-slate-400" htmlFor="agent-input-path">Input mapping (optional)</label>
+            <input
+              id="agent-input-path"
+              value={data.inputPath ?? ""}
+              onChange={(event) => onUpdate({ inputPath: event.target.value })}
+              placeholder="input.message or research.message"
+              className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {selectedModel === "gemini-3.8-flash" ? (
+            <div className="mb-5">
+              <label className="mb-2 block text-xs text-slate-400" htmlFor="agent-thinking-level">Thinking level</label>
+              <select
+                id="agent-thinking-level"
+                value={data.thinkingLevel ?? "medium"}
+                onChange={(event) => onUpdate({ thinkingLevel: event.target.value as WorkflowNodeData["thinkingLevel"] })}
+                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+          ) : selectedModel.startsWith("gemini-") ? (
+            <div className="mb-5">
+              <div className="mb-2 flex justify-between"><label className="text-xs text-slate-400" htmlFor="agent-temperature">Temperature</label><span className="font-mono text-xs text-cyan-400">{data.temperature ?? 0.7}</span></div>
+              <input id="agent-temperature" type="range" min="0" max="1" step="0.1" value={data.temperature ?? 0.7} onChange={(event) => onUpdate({ temperature: Number(event.target.value) })} className="w-full accent-blue-500" />
+            </div>
+          ) : (
+            <p className="mb-5 text-[11px] leading-relaxed text-slate-500">
+              OpenAI uses its model defaults for generation settings.
+            </p>
+          )}
+
+          <div className="mb-5">
+            <div className="mb-2 flex justify-between">
+              <label className="text-xs text-slate-400" htmlFor="agent-max-tokens">Output token limit</label>
+              <span className="font-mono text-xs text-cyan-400">{data.maxTokens ?? 512}</span>
+            </div>
+            <input
+              id="agent-max-tokens"
+              type="range"
+              min="64"
+              max="4096"
+              step="64"
+              value={data.maxTokens ?? 512}
+              onChange={(event) => onUpdate({ maxTokens: Number(event.target.value) })}
+              className="w-full accent-blue-500"
+            />
+          </div>
+
+          <div className="mb-5">
+            <div className="mb-2 flex justify-between">
+              <label className="text-xs text-slate-400" htmlFor="agent-timeout">Node timeout</label>
+              <span className="font-mono text-xs text-cyan-400">{Math.round((data.timeoutMs ?? 30000) / 1000)}s</span>
+            </div>
+            <input
+              id="agent-timeout"
+              type="range"
+              min="1000"
+              max="60000"
+              step="1000"
+              value={data.timeoutMs ?? 30000}
+              onChange={(event) => onUpdate({ timeoutMs: Number(event.target.value) })}
+              className="w-full accent-blue-500"
+            />
+          </div>
+
+          <div className="mb-5">
+            <label className="mb-2 block text-xs text-slate-400" htmlFor="agent-retries">Transient error retries</label>
+            <select
+              id="agent-retries"
+              value={data.maxRetries ?? 0}
+              onChange={(event) => onUpdate({ maxRetries: Number(event.target.value) })}
+              className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-100 outline-none focus:border-blue-500"
+            >
+              <option value={0}>None</option>
+              <option value={1}>1 retry</option>
+              <option value={2}>2 retries</option>
+              <option value={3}>3 retries</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">Retries provider timeouts and transient AI service errors with a short bounded backoff.</p>
           </div>
 
           {/* Instructions */}
@@ -314,58 +387,6 @@ export default function NodeInspector({
             />
           </div>
 
-          {/* Temperature */}
-          <div className="mb-5">
-            <div className="mb-2 flex justify-between">
-              <label className="text-xs text-slate-400">
-                Temperature
-              </label>
-
-              <span className="font-mono text-xs text-cyan-400">
-                {data.temperature ?? 0.7}
-              </span>
-            </div>
-
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={data.temperature ?? 0.7}
-              onChange={(e) =>
-                onUpdate({
-                  temperature: Number(e.target.value),
-                })
-              }
-              className="w-full accent-blue-500"
-            />
-          </div>
-
-          {/* Max iterations */}
-          <div className="mb-5">
-            <div className="mb-2 flex justify-between">
-              <label className="text-xs text-slate-400">
-                Max iterations
-              </label>
-
-              <span className="font-mono text-xs text-cyan-400">
-                {data.maxIterations ?? 10}
-              </span>
-            </div>
-
-            <input
-              type="range"
-              min="1"
-              max="20"
-              value={data.maxIterations ?? 10}
-              onChange={(e) =>
-                onUpdate({
-                  maxIterations: Number(e.target.value),
-                })
-              }
-              className="w-full accent-blue-500"
-            />
-          </div>
         </>
       )}
 
@@ -381,4 +402,31 @@ export default function NodeInspector({
       </div>
     </aside>
   );
+}
+
+function operationsFor(kind: WorkflowNodeData["toolKind"]) {
+  if (kind === "text") return [
+    { value: "trim", label: "Trim whitespace" },
+    { value: "uppercase", label: "Uppercase" },
+    { value: "lowercase", label: "Lowercase" },
+    { value: "replace", label: "Replace text" },
+  ];
+  if (kind === "json") return [
+    { value: "parse", label: "Parse JSON" },
+    { value: "stringify", label: "Serialize JSON" },
+    { value: "get", label: "Read field" },
+  ];
+  if (kind === "date") return [
+    { value: "now", label: "Current time (UTC)" },
+    { value: "addDays", label: "Add days" },
+    { value: "differenceDays", label: "Days between dates" },
+  ];
+  return [{ value: "calculate", label: "Calculate expression" }];
+}
+
+function defaultOperation(kind: WorkflowNodeData["toolKind"]): string {
+  if (kind === "text") return "uppercase";
+  if (kind === "json") return "parse";
+  if (kind === "date") return "now";
+  return "calculate";
 }

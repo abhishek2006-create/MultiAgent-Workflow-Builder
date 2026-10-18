@@ -33,11 +33,10 @@ const groups: { name: string; nodes: PaletteNode[] }[] = [
   {
     name: "TOOLS",
     nodes: [
-      { type: "tool", toolKind: "http", icon: "API", label: "HTTP Request" },
-      { type: "tool", toolKind: "search", icon: "WEB", label: "Web Search" },
       { type: "tool", toolKind: "calculator", icon: "CALC", label: "Calculator" },
-      { type: "tool", toolKind: "database", icon: "DB", label: "Database" },
-      { type: "tool", toolKind: "code", icon: "</>", label: "Code Executor" },
+      { type: "tool", toolKind: "text", icon: "TXT", label: "Text Transform" },
+      { type: "tool", toolKind: "json", icon: "JSON", label: "JSON Utility" },
+      { type: "tool", toolKind: "date", icon: "DATE", label: "Date Utility" },
     ],
   },
   {
