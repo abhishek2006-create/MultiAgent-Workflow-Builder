@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, SetMetadata, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Req, SetMetadata, UseGuards } from "@nestjs/common";
 import { AuthenticatedRequest, JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CreateExecutionDto } from "./execution.dto";
 import { ExecutionsService } from "./executions.service";
@@ -22,8 +22,13 @@ export class ExecutionsController {
   }
 
   @Get("workflows/:workflowId/executions")
-  history(@Req() request: AuthenticatedRequest, @Param("workflowId") workflowId: string) {
-    return this.executions.history(request.user.organizationId, workflowId);
+  history(
+    @Req() request: AuthenticatedRequest,
+    @Param("workflowId") workflowId: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.executions.history(request.user.organizationId, workflowId, cursor, limit);
   }
 
   @Get("workflows/:workflowId/executions/:executionId")

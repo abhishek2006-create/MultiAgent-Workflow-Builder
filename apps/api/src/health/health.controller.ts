@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -6,17 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
-=======
-import { Controller, Get } from '@nestjs/common';
-
-@Controller('health')
-export class HealthController {
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
   @Get()
   getHealth(): { status: string; service: string } {
     return { status: 'ok', service: 'api' };
   }
-<<<<<<< HEAD
 
   @Get('live')
   getLiveness(): { status: string } {
@@ -32,6 +24,4 @@ export class HealthController {
       throw new ServiceUnavailableException({ status: 'unavailable', database: 'unavailable' });
     }
   }
-=======
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 }

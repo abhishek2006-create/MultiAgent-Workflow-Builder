@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import {
   ArrayMaxSize,
   IsArray,
@@ -7,9 +6,6 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-=======
-import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 
 export class CreateWorkflowDto {
   @IsString()
@@ -17,7 +13,6 @@ export class CreateWorkflowDto {
   @MaxLength(120)
   name!: string;
 
-<<<<<<< HEAD
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -30,10 +25,6 @@ export class CreateWorkflowDto {
   @IsArray()
   @ArrayMaxSize(2000)
   edges!: Record<string, unknown>[];
-=======
-  @IsObject()
-  definition!: Record<string, unknown>;
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
 }
 
 export class UpdateWorkflowDto {
@@ -44,7 +35,6 @@ export class UpdateWorkflowDto {
   name?: string;
 
   @IsOptional()
-<<<<<<< HEAD
   @IsString()
   @MaxLength(500)
   description?: string;
@@ -58,8 +48,14 @@ export class UpdateWorkflowDto {
   @IsArray()
   @ArrayMaxSize(2000)
   edges?: Record<string, unknown>[];
-=======
-  @IsObject()
-  definition?: Record<string, unknown>;
->>>>>>> 38f420d14c4b93cff554976b777305f48627c1c7
+}
+
+export class ValidateWorkflowDefinitionDto {
+  @IsArray()
+  @ArrayMaxSize(500)
+  nodes!: Record<string, unknown>[];
+
+  @IsArray()
+  @ArrayMaxSize(2000)
+  edges!: Record<string, unknown>[];
 }

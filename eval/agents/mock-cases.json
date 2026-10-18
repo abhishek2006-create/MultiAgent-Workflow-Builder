@@ -1,0 +1,56 @@
+[
+  {
+    "name": "support-clear-answer",
+    "agent_type": "support",
+    "customer_message": "A customer asks when a refund will arrive. Explain that the exact timing depends on the payment provider.",
+    "mock_response": {
+      "message": "Refund timing depends on the payment provider; check the transaction status for an estimate.",
+      "intent": "refund_timing",
+      "needs_human": false
+    },
+    "required_field": "message",
+    "expected_intent": "refund_timing"
+  },
+  {
+    "name": "planner-measurable-steps",
+    "agent_type": "planner",
+    "customer_message": "Plan a workflow that checks an order and drafts a status reply.",
+    "mock_response": {
+      "message": "Check the order record, then draft a reply from its current status.",
+      "intent": "workflow_planning",
+      "needs_human": false,
+      "plan": ["Read the order status", "Draft a status reply"],
+      "success_criteria": ["The reply matches the saved order status"]
+    },
+    "required_field": "plan",
+    "expected_intent": "workflow_planning"
+  },
+  {
+    "name": "research-source-grounding",
+    "agent_type": "research",
+    "customer_message": "Source: Store policy says unopened items may be returned within 30 days.",
+    "mock_response": {
+      "message": "The supplied policy allows unopened items to be returned within 30 days.",
+      "intent": "return_policy",
+      "needs_human": false,
+      "research_findings": ["Unopened items are returnable within 30 days."],
+      "sources": ["Source: Store policy says unopened items may be returned within 30 days."]
+    },
+    "required_field": "research_findings",
+    "expected_intent": "return_policy"
+  },
+  {
+    "name": "reviewer-flags-missing-evidence",
+    "agent_type": "reviewer",
+    "customer_message": "Review this refund answer: 'Your refund is approved' with no order or payment evidence.",
+    "mock_response": {
+      "message": "The answer makes an unsupported approval claim.",
+      "intent": "unsupported_claim",
+      "needs_human": true,
+      "review_passed": false,
+      "issues": ["No order or payment evidence was supplied."]
+    },
+    "required_field": "issues",
+    "expected_intent": "unsupported_claim"
+  }
+]

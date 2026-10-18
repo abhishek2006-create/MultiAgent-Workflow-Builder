@@ -2,6 +2,8 @@
 
 Audit date: 2026-10-10 (Asia/Calcutta)
 
+This is a historical baseline snapshot. For current implementation status and verification, use [completion-inventory.md](completion-inventory.md) and [testing-report.md](testing-report.md).
+
 ## Working tree and baseline
 
 The working tree was already heavily modified before this implementation turn. It contains edits across the API, web application, Prisma schema, migrations, lockfile, and teammate documentation, plus newly added files and an untracked file literally named `et --hard CRITICAL_HASH_HERE`. Those changes are treated as existing user work and have not been reset, staged, or removed. The exact initial state is available in the session's git status. The API baseline build (`npm --workspace apps/api run build`, from the repository root) completed successfully before the Phase 7 edits.

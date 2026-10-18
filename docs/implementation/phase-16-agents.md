@@ -17,4 +17,4 @@ The workflow graph carries each node's input and output to connected downstream 
 
 ## Limits
 
-These agent roles currently share one Gemini model and one structured response contract. Their role instructions differ, but external search, code execution, database access, tool permission grants, and provider usage/token reporting are not implemented. A workflow composes agents by connecting nodes, rather than having agents dynamically invoke one another outside the graph.
+These roles share the Gemini provider adapter but use role-specific structured fields for plans, success criteria, research findings, inferences, review results, issues, and code proposals. The server validates model, generation limits, and optional input mapping. Research can use only connected workflow input; sources must appear in that supplied context. Coding returns proposals and never executes code. Provider token counts are stored per step when Gemini returns complete metadata. External search, database access, per-agent external tool grants, and dynamic agent-to-agent calls remain unsupported. A workflow composes agents through connected graph nodes.

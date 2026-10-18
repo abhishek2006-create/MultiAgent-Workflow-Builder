@@ -1,43 +1,41 @@
 # Testing report
 
-## Executed checks
+Updated: 2026-10-17. This report distinguishes checks run in the current workspace from older database-backed checks recorded before this environment lost access to PostgreSQL.
 
-| Check | Result | Notes |
+## Checks run in this workspace
+
+| Command | Result | Notes |
 | --- | --- | --- |
-| `npm --workspace apps/api run build` | Passed | Nest API, Prisma types, AI client, worker, and approval routes compile. |
-| `npm --workspace apps/api test` | Passed | Builds the API then runs nine Node built-in tests for graph validation, condition/calculator runtime, and safe retry behavior. |
-| API dev database lifecycle hook | Passed | Starts the isolated PostgreSQL-only Compose file, waits for readiness, and applies pending migrations before API dev startup. |
-| `npm --workspace apps/web run build` | Passed | Existing CSS import-order and unused `setNodes` warnings remain. |
-| `npm --workspace apps/api run db:migrate:deploy` | Passed | PostgreSQL was started from the local Compose service; all 8 migrations were already applied. |
-| PostgreSQL container readiness | Passed | `pg_isready` accepted connections and `/api/health/ready` returned 200 through the Next proxy. |
-| `apps/ai/.venv/Scripts/python.exe -m compileall -q apps/ai/app` | Passed | Python syntax only. |
-| `PYTHONPATH=apps/ai apps/ai/.venv/Scripts/python.exe -m unittest discover -s apps/ai/tests -v` | Passed (3 tests) | Internal secret rejection, invalid request rejection, and missing Gemini key response. No real Gemini call. |
-| Next proxy `GET /api/health/ready` | Passed (200) | API and local PostgreSQL reported ready. |
-| Next proxy `GET /api/auth/me` without a session | Passed (401) | Expected protected endpoint behavior. |
-| API login without Origin / with configured Origin | Passed (403 / 401) | Missing Origin is denied; allowed Origin reaches credential validation for a deliberately nonexistent identity. |
-| End-to-end signup → profile → input/output workflow → logout | Passed | Unique temporary account through Next proxy; both persisted steps completed and all temporary records were deleted. |
-| End-to-end human approval pause/resume | Passed | Temporary workflow paused as `WAITING_APPROVAL`, owner approved it, worker resumed to `COMPLETED`; test data was deleted. |
-| Lease-backed approval pause/resume | Passed | Repeated after the worker lease migration; approval released the first lease, resume acquired a lease, and all three steps completed. Temporary identity/workspace cleanup was confirmed. |
-| Expired worker lease recovery | Passed | A `RUNNING` execution with an expired lease owned by a fake stopped worker was reclaimed and completed by the live worker. |
-| Failed execution retry through editor API | Passed | An authenticated run failed on an unsupported node; retry created a separate failed run linked to the original and preserved its workflow version and input. Temporary account/workspace data was deleted. |
-| Conditional branch execution | Passed | Authenticated input selected the true edge, completed its output node, and persisted the false output as `SKIPPED`. Temporary account/workspace data was deleted. |
-| Database startup recovery | Passed | Started the stopped PostgreSQL service without resetting its named volume; API and web proxy readiness returned 200. |
-| Prior phase account/workspace/workflow/version/execution manual checks | Passed | See phase 9–12 implementation notes; these used temporary identities and were cleaned up. |
+| `npm test --prefix apps/api` | Passed: 49 tests | Builds NestJS first, then covers auth/workflow helpers, execution creation/cancellation/retry/history pagination, approval inbox scoping/pagination, graph validation/scheduling/retry policy, output schema validation, AI timeout bounds, built-in tools, input schemas, workflow import/export round-trip validation, and GPT model selection/forwarding. |
+| `npm run lint --prefix apps/web` | Passed | ESLint reported no errors or warnings. |
+| From `apps/web`: `$env:NEXT_DIST_DIR='.next-verify'; npm run build` | Passed | Next.js 15.5.27 compiled, checked types, generated 12 static pages including `/approvals`, and completed build tracing. CSS import-order warning is fixed. |
+| `npx tsc --noEmit --pretty false` from `apps/web` | Passed | TypeScript check completed with no diagnostics. |
+| `npm run build --prefix apps/web` (default `.next`) | Blocked by host | Next fails with `EPERM` creating `apps/web/.next/server/app/<route>`. A contained custom `NEXT_DIST_DIR` works; default output failure is reproducible on this Windows host. |
+| `npx prisma validate --schema apps/api/prisma/schema.prisma` | Passed | Prisma schema validates without a database connection. |
+| `docker compose config --quiet` and `docker compose -f docker-compose.db.yml config --quiet` | Passed | Used placeholder-only values for required Compose variables. No containers were started. |
+| `apps/ai/.venv/Scripts/python.exe -m compileall -q app tests` from `apps/ai` | Passed | AI source and test syntax compile. |
+| Targeted synchronous Python provider/schema tests | Passed: 6 tests | Provider selection, OpenAI structured response/usage parsing, Gemini usage metadata, and bounded request settings. No provider call. |
+| `python -m unittest discover -s apps/ai/tests -v` | Blocked by host async runtime | The project venv is Python 3.14.7, outside the declared 3.12–3.13 range. The bundled Python 3.12.14 runtime also hangs on a minimal `asyncio.run(asyncio.sleep(0))` probe in this host, so async service tests could not be verified. Docker is unavailable. |
+| `Test-NetConnection localhost -Port 5432` | Blocked | PostgreSQL is not listening on localhost:5432. |
+| `docker info --format '{{.ServerVersion}}'` | Blocked | Docker CLI is present, but the Docker daemon is unavailable. |
 
-## Environment notes
+The app's bundled `node_modules/next/dist/docs/` directory requested by `AGENTS.md` is absent in the installed Next package. The build-directory option was checked against the official Next.js documentation. The config defaults to `.next` and accepts only a safe single-directory name for `NEXT_DIST_DIR`.
 
-The AI virtual environment is Python 3.14.7; `apps/ai/pyproject.toml` specifies Python 3.12–3.13. An editable install correctly refused that environment. The declared SDK and LangGraph were installed into the existing venv to run local tests, but a clean install must use Python 3.12 or 3.13. The environment has no Gemini API key configured, so provider generation, quota behavior, latency, and token accounting are not verified.
+## Historical database checks
 
-## Missing quality gates
+The earlier report recorded authenticated signup/workflow creation, execution persistence, approval pause/resume, lease recovery, retry, and conditional routing against a live local PostgreSQL instance. Those checks are historical results and were not repeatable in the current workspace because neither PostgreSQL nor the Docker engine is available. Do not treat them as current-environment verification.
 
-There is no API Jest setup, frontend test runner, browser E2E suite, isolated database test target, or AI evaluation dataset in the repository. Worker completion, approval pause/resume, and expired-lease recovery were manually checked against the local database; retry and safe node-runtime semantics are covered by service-level tests, while authorization matrices, duplicate job claims, oversized body rejection, and provider failure cases still need broader coverage.
+## Gemini and AI service
 
-## Current phase 17–18 status
+The configured OpenAI key was used without printing its value. `GET /v1/models` returned HTTP 200 and listed `gpt-5.5`; one minimal stored-disabled Responses request returned HTTP 429, so generation is blocked by the account/project quota or rate limit. Check OpenAI's [error-code guidance](https://developers.openai.com/api/docs/guides/error-codes) for the corresponding billing and rate-limit actions. No live Gemini request was made. Real provider operation still depends on the selected model's server-side key and allowlist, an `AI_SERVICE_URL` reachable from the API, and the same `AI_SERVICE_SECRET` in the API and AI service.
 
-Worker heartbeat/lease persistence and scoped stale-job recovery are implemented. A running job can be recovered only when its lease is missing or expired; active leases are not reset. The workflow editor polls every 250 ms and animates the current node and incoming edge, then replays completed nodes sequentially. Condition routing and calculator evaluation are covered by unit tests, and conditional routing also passed a live database-backed branch test. These behaviors passed the live checks listed above and the API/web builds.
+The research role analyzes supplied context. Web search is not configured, so the agent must not claim external research or citations. `AI service is not configured` indicates missing API/AI service settings; it does not confirm that a provider key can generate output. See [local-development.md](local-development.md) for setup and diagnosis.
 
-## Existing warnings and failed attempts
+## Remaining verification
 
-- Web build warns that a Google Fonts `@import` appears after CSS rules, and that `setNodes` is unused in `WorkflowBuilder.tsx`.
-- `git diff --check` reports preexisting whitespace in `auth.controller.ts`, `web/lib/api.ts`, and `web/types/workflow.ts`.
-- `pip install -e apps/ai` was not compatible with the only installed interpreter (3.14.7), due to the declared `<3.14` constraint. Installing individual declared runtime dependencies allowed the targeted tests to run.
+- Run the full async Python API/agent suite with Python 3.12 or 3.13.
+- Start PostgreSQL, apply migrations without resetting data, and repeat authorization, worker, approval, cancellation, recovery, and parallel-node integration checks.
+- Add a deterministic cross-service test and automated browser E2E flow; the repository has no frontend test runner or browser E2E suite.
+- Run `apps/ai/tests/test_evaluations.py` and the full AI suite under Python 3.12 or 3.13; the evaluation cases are in `eval/agents/mock-cases.json` and use mocked provider responses.
+- Resolve the OpenAI 429, then repeat the GPT-5.5 generation check; verify Gemini with a current operator-configured key.
+- Deployment is outside this task and was not performed.
