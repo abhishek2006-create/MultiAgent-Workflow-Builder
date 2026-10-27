@@ -1,4 +1,5 @@
 "use client";
+import SearchSources from "./SearchSources";
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -157,6 +158,7 @@ export default function ExecutionHistory({ workflowId }: { workflowId: string })
                         <JsonPanel title="Step input" value={step.input} compact />
                         <JsonPanel title="Step output" value={step.output} compact />
                       </div>
+                      <SearchSources value={step.output} />
                     </article>
                   ))}
                 </div>

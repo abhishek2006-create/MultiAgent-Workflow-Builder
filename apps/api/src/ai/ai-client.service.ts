@@ -13,6 +13,15 @@ export interface SupportAgentInput {
   timeout_ms?: number;
 }
 
+export interface AiConfiguration {
+  available: boolean;
+  message?: string;
+  defaultModel: string;
+  providers: Array<{ name: string; configured: boolean; models: string[] }>;
+  nodeTimeoutMs: number;
+  maxOutputTokens: number;
+}
+
 export interface SupportAgentOutput {
   message: string;
   intent: string;
@@ -32,7 +41,40 @@ export interface SupportAgentOutput {
 export class AiClientService {
   constructor(private readonly config: ConfigService) {}
 
+  async configuration(): Promise<AiConfiguration> {
+    const baseUrl = this.config.get<string>("AI_SERVICE_URL")?.replace(/\/+$/, "");
+    const secret = this.config.get<string>("AI_SERVICE_SECRET");
+    const unavailable = (message: string): AiConfiguration => ({ available: false, message, defaultModel: "", providers: [], nodeTimeoutMs: 60000, maxOutputTokens: 4096 });
+    if (!baseUrl || !secret) return unavailable("Set AI_SERVICE_URL and AI_SERVICE_SECRET in the API environment.");
+    try {
+      const response = await fetch(`${baseUrl}/ai/configuration`, {
+        headers: { "x-ai-service-secret": secret }, signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) return unavailable(response.status === 401
+        ? "AI_SERVICE_SECRET must match in the API and AI service environments."
+        : "Restart the AI service to load the configuration endpoint.");
+      const value = await response.json() as Omit<AiConfiguration, "available">;
+      if (typeof value.defaultModel !== "string" || !Array.isArray(value.providers) ||
+          !value.providers.every((provider) => typeof provider.name === "string" && typeof provider.configured === "boolean" &&
+            Array.isArray(provider.models) && provider.models.every((model) => typeof model === "string"))) {
+        return unavailable("The AI service returned an invalid configuration response.");
+      }
+      // Pick allowed fields explicitly: never relay service credentials or raw configuration.
+      return { available: true, defaultModel: value.defaultModel, providers: value.providers.map(({ name, configured, models }) => ({ name, configured, models })), nodeTimeoutMs: 60000, maxOutputTokens: 4096 };
+    } catch {
+      return unavailable("AI service is unreachable. Start it with npm run dev:ai.");
+    }
+  }
+
   async support(input: SupportAgentInput): Promise<SupportAgentOutput> {
+    return this.send(input, "chat");
+  }
+
+  async search(query: string, maxResults = 5): Promise<SupportAgentOutput> {
+    return this.send({ query, max_results: maxResults, timeout_ms: 60000 }, "search");
+  }
+
+  private async send(input: SupportAgentInput | { query: string; max_results: number; timeout_ms: number }, operation: "chat" | "search"): Promise<SupportAgentOutput> {
     const baseUrl = this.config.get<string>("AI_SERVICE_URL")?.replace(/\/+$/, "");
     const secret = this.config.get<string>("AI_SERVICE_SECRET");
     if (!baseUrl || !secret) {
@@ -44,11 +86,11 @@ export class AiClientService {
     }
 
     // Leave the provider its full configured timeout plus a small response/serialization margin.
-    const configuredTimeoutMs = this.config.get<number>("AI_REQUEST_TIMEOUT_MS", 65_000);
+    const configuredTimeoutMs = this.config.get<number>("AI_REQUEST_TIMEOUT_MS", 120_000);
     const timeoutMs = Math.min(120_000, Math.max(configuredTimeoutMs, (input.timeout_ms ?? 0) + 5_000));
     let response: Response;
     try {
-      response = await fetch(`${baseUrl}/ai/chat`, {
+      response = await fetch(`${baseUrl}/ai/${operation}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -62,7 +104,7 @@ export class AiClientService {
         throw new GatewayTimeoutException("AI service request timed out");
       }
       throw new ServiceUnavailableException(
-        `AI service at ${baseUrl} is unavailable. Start it and make sure this URL is reachable from the API process.`,
+        `AI service at ${baseUrl} is unavailable. Run npm run dev:ai in another terminal, or start the complete app with npm run dev:all.`,
       );
     }
     if (!response.ok) {
@@ -82,6 +124,9 @@ export class AiClientService {
       }
       if (response.status === 502) {
         throw new BadGatewayException(detail ?? "The selected AI provider request failed. Check the AI service logs for the provider status code.");
+      }
+      if (response.status === 500) {
+        throw new BadGatewayException(detail ?? "AI service internal error. Check the AI service terminal for the error reference.");
       }
       throw new BadGatewayException(`AI service returned HTTP ${response.status}. Check AI service configuration and logs.`);
     }
@@ -116,7 +161,7 @@ async function readSafeErrorDetail(response: Response): Promise<string | undefin
     if (!payload || typeof payload !== "object") return undefined;
     const detail = (payload as Record<string, unknown>).detail;
     if (typeof detail !== "string" || detail.length > 300) return undefined;
-    if (/^(Gemini |OpenAI |The model |The selected (?:Gemini|OpenAI) model|Set (?:GEMINI|OPENAI)_API_KEY|Choose a supported Gemini or GPT model|AI_PROVIDER must be|AI_PROVIDER_TIMEOUT_MS must be|Install the apps\/ai dependencies|Temperature must be|max_output_tokens must be|thinking_level must be|timeout_ms must be|Unsupported agent type)/.test(detail)) {
+    if (/^(AI service internal error \(reference [a-f0-9]{12}\)\. Check the AI service terminal for this reference\.$|Gemini |OpenAI |The model |The selected (?:Gemini|OpenAI) model|Set (?:GEMINI|OPENAI)_API_KEY|Choose a supported Gemini or GPT model|AI_PROVIDER must be|AI_PROVIDER_TIMEOUT_MS must be|Install the apps\/ai dependencies|Temperature must be|max_output_tokens must be|thinking_level must be|timeout_ms must be|Unsupported agent type)/.test(detail)) {
       return detail;
     }
     return undefined;

@@ -42,6 +42,7 @@ export class DashboardService {
     }
 
     return {
+      updatedAt: new Date().toISOString(),
       workflowCount,
       executionCount: statusCounts.reduce((sum, count) => sum + count, 0),
       statuses,

@@ -82,10 +82,11 @@ export interface WorkflowStore {
   setExecution: (executionId: string | null, status: ExecutionStatus) => void;
   setExecutionDetails: (details: WorkflowExecution | null) => void;
   hydrate: (workflow: Workflow) => void;
+  acceptSaved: (workflow: Workflow, snapshot: Pick<WorkflowStore, "name" | "description" | "nodes" | "edges">) => void;
   reset: () => void;
 }
 
-const initialState: Omit<WorkflowStore, "setWorkflowMetadata" | "setWorkflowId" | "setNodes" | "onNodesChange" | "addNode" | "updateNode" | "deleteNode" | "duplicateNode" | "setEdges" | "onEdgesChange" | "addConnection" | "deleteEdge" | "selectNode" | "setLoading" | "setSaving" | "setError" | "markClean" | "markDirty" | "setValidationResult" | "clearValidation" | "setExecution" | "setExecutionDetails" | "initializeNewWorkflow" | "hydrate" | "reset"> = {
+const initialState: Omit<WorkflowStore, "setWorkflowMetadata" | "setWorkflowId" | "setNodes" | "onNodesChange" | "addNode" | "updateNode" | "deleteNode" | "duplicateNode" | "setEdges" | "onEdgesChange" | "addConnection" | "deleteEdge" | "selectNode" | "setLoading" | "setSaving" | "setError" | "markClean" | "markDirty" | "setValidationResult" | "clearValidation" | "setExecution" | "setExecutionDetails" | "initializeNewWorkflow" | "hydrate" | "acceptSaved" | "reset"> = {
   workflowId: null,
   name: "Untitled Workflow",
   description: "",
@@ -140,7 +141,7 @@ export const useWorkflowStore = create<WorkflowStore>((set) => ({
   onNodesChange: (changes) => {
     set((state) => ({
       nodes: applyNodeChanges(changes, state.nodes),
-      isDirty: true,
+      isDirty: state.isDirty || changes.some((change) => change.type !== "select" && change.type !== "dimensions"),
     }));
   },
 
@@ -219,7 +220,7 @@ export const useWorkflowStore = create<WorkflowStore>((set) => ({
   onEdgesChange: (changes) => {
     set((state) => ({
       edges: applyEdgeChanges(changes, state.edges),
-      isDirty: true,
+      isDirty: state.isDirty || changes.some((change) => change.type !== "select"),
     }));
   },
 
@@ -301,6 +302,17 @@ export const useWorkflowStore = create<WorkflowStore>((set) => ({
   },
 
   setExecutionDetails: (details) => set({ executionDetails: details }),
+
+  acceptSaved: (workflow, snapshot) => {
+    set((state) => ({
+      workflowId: workflow.id,
+      version: workflow.version,
+      status: workflow.status,
+      // Keep edits made during the request and preserve the execution console.
+      isDirty: state.name !== snapshot.name || state.description !== snapshot.description
+        || state.nodes !== snapshot.nodes || state.edges !== snapshot.edges,
+    }));
+  },
 
   hydrate: (workflow) => {
     set({

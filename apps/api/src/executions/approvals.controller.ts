@@ -26,12 +26,17 @@ export class ApprovalsController {
         status: "PENDING",
         execution: { workflow: { organizationId: request.user.organizationId } },
       },
-      select: { id: true, stepId: true },
+      select: { id: true, stepId: true, step: { select: { input: true } } },
     });
     if (!approval) throw new NotFoundException("Pending approval not found");
 
     const status = input.approved ? "APPROVED" : "REJECTED";
     const decision = { approved: input.approved, comment: input.comment?.trim() ?? null };
+    const upstream = approval.step?.input;
+    const approvedOutput = {
+      ...(upstream && typeof upstream === "object" && !Array.isArray(upstream) ? upstream : { input: upstream }),
+      approval: decision,
+    };
     return this.prisma.$transaction(async (tx) => {
       const changed = await tx.approval.updateMany({
         where: { id: approval.id, status: "PENDING" },
@@ -48,7 +53,7 @@ export class ApprovalsController {
         await tx.workflowExecutionStep.update({
           where: { id: approval.stepId },
           data: input.approved
-            ? { status: "COMPLETED", output: decision as Prisma.InputJsonValue, error: null }
+            ? { status: "COMPLETED", output: approvedOutput as Prisma.InputJsonValue, error: null, completedAt: new Date() }
             : { status: "FAILED", error: "Human approval was rejected" },
         });
       }

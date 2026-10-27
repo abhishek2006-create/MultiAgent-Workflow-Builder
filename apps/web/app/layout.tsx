@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { TopNav } from "../components/layout/Topbar";
+import SiteMotion from "../components/layout/SiteMotion";
 
 export const metadata: Metadata = {
   title: "FlowForge AI",
@@ -13,8 +14,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <TopNav />
-        <main id="app">{children}</main>
+        <SiteMotion>
+          <TopNav />
+          <main id="app">{children}</main>
+        </SiteMotion>
       </body>
     </html>
   );

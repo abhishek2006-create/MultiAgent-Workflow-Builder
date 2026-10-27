@@ -7,7 +7,14 @@
     "packages/contracts"
   ],
   "scripts": {
+    "dev": "npm --workspace apps/web run dev",
+    "dev:all": "node scripts/dev.mjs",
     "dev:api": "npm --workspace apps/api run start:dev",
+    "dev:ai": "node scripts/ai.mjs dev",
+    "test": "npm --workspace apps/api test && npm --workspace apps/web test && npm run test:ai",
+    "test:ai": "node scripts/ai.mjs test",
+    "test:integration": "npm run build:api && node scripts/smoke.cjs",
+    "test:integration:live": "npm run build:api && node scripts/smoke.cjs --live-ai",
     "build:api": "npm --workspace apps/api run build",
     "prisma:generate": "npm --workspace apps/api run prisma:generate",
     "prisma:migrate": "npm --workspace apps/api run prisma:migrate",

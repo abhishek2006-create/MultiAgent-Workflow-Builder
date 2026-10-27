@@ -27,6 +27,8 @@ interface WorkflowCanvasProps {
   nodes: Node<WorkflowNodeData & Record<string, unknown>>[];
   edges: Edge[];
   isRunning: boolean;
+  isReplaying?: boolean;
+  isWaiting?: boolean;
   canvasRef: RefObject<HTMLDivElement | null>;
   onInit: (
     instance: ReactFlowInstance<
@@ -76,14 +78,17 @@ function WorkflowEdge({
           ...style,
         }}
       />
-      {animated && (
+      {animated && (<>
         <path
           aria-hidden="true"
           className="workflow-edge-pulse"
           d={edgePath}
-          style={{ stroke: selected ? "#67e8f9" : "#60a5fa" }}
+          style={{ stroke: String(style?.stroke ?? "#67e8f9"), color: String(style?.stroke ?? "#67e8f9") }}
         />
-      )}
+        <circle className="workflow-edge-particle" r="4" fill={String(style?.stroke ?? "#67e8f9")} aria-hidden="true">
+          <animateMotion dur="1s" repeatCount="indefinite" path={edgePath} />
+        </circle>
+      </>)}
     </g>
   );
 }
@@ -107,6 +112,8 @@ export default function WorkflowCanvas({
   nodes,
   edges,
   isRunning,
+  isReplaying = false,
+  isWaiting = false,
   canvasRef,
   onInit,
   onNodesChange,
@@ -123,10 +130,6 @@ export default function WorkflowCanvas({
     <div
       ref={canvasRef}
       className="workflow-canvas relative h-full flex-1 overflow-hidden"
-      style={{
-        background:
-          "radial-gradient(900px 500px at 50% 8%, rgba(47, 123, 255, 0.1), transparent 70%), #070b12",
-      }}
     >
       <div aria-hidden="true" className="workflow-canvas-ambient" />
       <ReactFlow
@@ -147,7 +150,7 @@ export default function WorkflowCanvas({
         colorMode="dark"
         defaultEdgeOptions={{
           type: "workflow",
-          animated: true,
+          animated: false,
           style: {
             stroke: "rgba(100,180,255,0.35)",
             strokeWidth: 2,
@@ -169,6 +172,7 @@ export default function WorkflowCanvas({
         <MiniMap
           nodeColor={(node) => {
             if (node.data.status === "running") return "#22d3ee";
+            if (node.data.status === "waiting") return "#fbbf24";
             if (node.data.status === "completed") return "#34d399";
             if (node.type === "input" || node.type === "output") return "#22d3ee";
             if (node.type === "reviewer") return "#a78bfa";
@@ -198,7 +202,7 @@ export default function WorkflowCanvas({
                   : "bg-slate-500"
             }`}
           />
-          {isRunning
+          {isWaiting ? "WAITING FOR APPROVAL" : isReplaying ? "COMPLETED · PATH REPLAY" : isRunning
             ? "EXECUTING"
             : runCompleted
               ? "RUN COMPLETE"

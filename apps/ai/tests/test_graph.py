@@ -1,10 +1,13 @@
 import os
+import asyncio
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.graph import (
     AIConfigurationError,
+    AIProviderTimeout,
+    provider_configuration,
     _generate_openai,
     _openai_response_text,
     _openai_usage_metadata,
@@ -17,6 +20,23 @@ from app.schemas import AgentContent, ChatRequest
 
 
 class AgentContractTests(unittest.IsolatedAsyncioTestCase):
+    async def test_node_deadline_covers_all_provider_attempts(self) -> None:
+        async def slow_provider(**kwargs):
+            await asyncio.sleep(10)
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only", "GEMINI_ALLOWED_MODELS": "gemini-3.8-flash"}), patch("app.graph._generate_gemini", slow_provider):
+            started = asyncio.get_running_loop().time()
+            with self.assertRaises(AIProviderTimeout):
+                await support_agent({"customer_message": "hello", "model": "gemini-3.8-flash", "timeout_ms": 1000})
+            self.assertLess(asyncio.get_running_loop().time() - started, 2)
+
+    def test_configuration_exposes_flags_and_models_without_keys(self) -> None:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "secret-not-for-client", "OPENAI_MODEL": "gpt-configured", "OPENAI_ALLOWED_MODELS": ""}):
+            configuration = provider_configuration()
+        self.assertNotIn("secret-not-for-client", str(configuration))
+        provider = next(value for value in configuration["providers"] if value["name"] == "OpenAI")
+        self.assertTrue(provider["configured"])
+        self.assertIn("gpt-configured", provider["models"])
+
     async def test_agent_uses_configured_model_and_role_guidance(self) -> None:
         content = AgentContent(
             message="Findings from supplied context",
@@ -52,6 +72,32 @@ class AgentContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mocked_generate.call_args.kwargs["temperature"], 0.2)
         self.assertEqual(mocked_generate.call_args.kwargs["max_output_tokens"], 256)
         self.assertEqual(mocked_generate.call_args.kwargs["timeout_ms"], 12000)
+
+    async def test_agent_retries_invalid_structured_output_with_compact_instructions(self) -> None:
+        content = AgentContent(
+            message="A concise plan",
+            intent="planning",
+            needs_human=False,
+            plan=["Complete the requested task"],
+            success_criteria=["The task is complete"],
+        ).model_dump_json()
+        mocked_generate = AsyncMock(side_effect=[("{not json", {"inputTokens": 10, "outputTokens": 2, "totalTokens": 12}), (content, {"inputTokens": 11, "outputTokens": 8, "totalTokens": 19})])
+        env = {
+            "GEMINI_API_KEY": "test-only-key",
+            "GEMINI_ALLOWED_MODELS": "gemini-3.8-flash",
+        }
+        with patch.dict(os.environ, env), patch("app.graph._generate_gemini", mocked_generate):
+            result = await support_agent({
+                "customer_message": "Plan this task",
+                "agent_type": "planner",
+                "model": "gemini-3.8-flash",
+            })
+
+        self.assertEqual(result["message"], "A concise plan")
+        self.assertEqual(result["usage"], {"inputTokens": 21, "outputTokens": 10, "totalTokens": 31})
+        self.assertEqual(mocked_generate.await_count, 2)
+        retry_prompt = mocked_generate.call_args_list[1].kwargs["prompt"].lower()
+        self.assertIn("regenerate it as compact json", retry_prompt)
 
     async def test_agent_routes_selected_gpt_model_to_openai(self) -> None:
         content = AgentContent(message="OpenAI response", intent="support", needs_human=False).model_dump_json()

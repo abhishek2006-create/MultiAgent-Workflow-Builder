@@ -1,5 +1,11 @@
 # Testing report
 
+Current verification: see [the October 28 completion review](completion-2026-10-28.md). The new root suites and isolated PostgreSQL smoke supersede the historical environment blockers below. The actual Planner 500 is covered by a regression test using the real LangGraph response state. Live Gemini completed the default graph; live GPT and Google-grounded search returned HTTP 429.
+
+Final pass counts: **API 55/55, web client 6/6, Python 27/27**. Frontend lint/types/production build, development startup, eight database migrations, isolated-schema worker recovery/approval/authorization/search-tool smoke, and browser login/run/history refresh checks passed. CI configuration is provided but has not been executed on GitHub in this session. [Browser proof](screenshots/workflow-completed.png).
+
+Startup/animation follow-up: **API 55/55 and web client 10/10**; lint, TypeScript and production build passed. Verified automatic local AI start before Nest, reuse of an existing AI service, and that stopping the reusing API leaves the shared AI service running. A real browser run completed all four Gemini agents and human approval with direction arrows, active connection packets and paused approval status. The temporary account/workflow was removed. [Direction proof](screenshots/workflow-direction.png).
+
 Updated: 2026-10-17. This report distinguishes checks run in the current workspace from older database-backed checks recorded before this environment lost access to PostgreSQL.
 
 ## Checks run in this workspace

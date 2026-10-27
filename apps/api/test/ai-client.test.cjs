@@ -37,6 +37,35 @@ test("forwards the selected GPT model to the AI service", async () => {
   }
 });
 
+test("configuration only forwards public provider fields", async () => {
+  await withResponse(200, { defaultModel: "gemini-test", providers: [{ name: "Gemini", configured: true, models: ["gemini-test"], apiKey: "never-forward" }], secret: "never-forward" }, async () => {
+    const result = await client().configuration();
+    assert.equal(result.available, true);
+    assert.doesNotMatch(JSON.stringify(result), /never-forward/);
+  });
+});
+
+test("web search uses the dedicated authenticated AI endpoint", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    assert.equal(url, "http://ai:8000/ai/search");
+    assert.equal(options.headers["x-ai-service-secret"], "mock-only-secret");
+    assert.deepEqual(JSON.parse(options.body), { query: "a search", max_results: 3, timeout_ms: 60000 });
+    return new Response(JSON.stringify({ message: "Answer", intent: "web_search", needs_human: false, sources: ["https://example.com"] }));
+  };
+  try { assert.equal((await client().search("a search", 3)).intent, "web_search"); }
+  finally { global.fetch = originalFetch; }
+});
+
+test("internal failures preserve a safe reference without forwarding arbitrary details", async () => {
+  await withResponse(500, { detail: "AI service internal error (reference abcdef123456). Check the AI service terminal for this reference." }, async () => {
+    await assert.rejects(client().support({ customer_message: "hello" }), /abcdef123456/);
+  });
+  await withResponse(500, { detail: "secret-value" }, async () => {
+    await assert.rejects(client().support({ customer_message: "hello" }), (error) => !error.message.includes("secret-value"));
+  });
+});
+
 test("explains when API and AI service shared secrets do not match", async () => {
   await withResponse(401, { detail: "AI service authentication failed" }, async () => {
     await assert.rejects(client().support({ customer_message: "test" }), /AI_SERVICE_SECRET match/);

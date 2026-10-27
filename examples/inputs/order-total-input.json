@@ -1,0 +1,6 @@
+{
+  "request": "Calculate and review my order total, then wait for my approval.",
+  "price": 499,
+  "quantity": 2,
+  "delivery": 50
+}

@@ -43,3 +43,13 @@ class UsageMetadata(BaseModel):
 
 class ChatResponse(AgentContent):
     usage: UsageMetadata | None = None
+    searchSources: list[dict[str, str]] = Field(default_factory=list, max_length=10)
+    searchQueries: list[str] = Field(default_factory=list, max_length=20)
+    searchSuggestionsHtml: str | None = Field(default=None, max_length=64000)
+
+
+class SearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=2000)
+    max_results: int = Field(default=5, ge=1, le=10)
+    timeout_ms: int = Field(default=60000, ge=1000, le=60000)

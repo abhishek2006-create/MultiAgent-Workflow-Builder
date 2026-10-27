@@ -2,6 +2,8 @@
 
 import type { Node } from "@xyflow/react";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { api, type AiConfiguration } from "../../lib/api";
 import type { WorkflowNodeData } from "../../types/workflow";
 
 interface NodeInspectorProps {
@@ -14,6 +16,12 @@ export default function NodeInspector({
   onUpdate,
 }: NodeInspectorProps) {
   const [inputSchemaText, setInputSchemaText] = useState("");
+  const [configuration, setConfiguration] = useState<AiConfiguration | null>(null);
+  useEffect(() => {
+    let active = true;
+    void api.ai.configuration().then((result) => { if (active) setConfiguration(result); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
   const [inputSchemaError, setInputSchemaError] = useState<string | null>(null);
   const [outputSchemaText, setOutputSchemaText] = useState("");
   const [outputSchemaError, setOutputSchemaError] = useState<string | null>(null);
@@ -28,7 +36,7 @@ export default function NodeInspector({
 
   if (!node) {
     return (
-      <aside className="w-[290px] shrink-0 border-l border-white/10 bg-slate-950/40 p-5">
+      <aside className="workflow-inspector w-[290px] shrink-0 border-l border-white/10 bg-slate-950/40 p-5">
         <h3 className="font-mono text-xs tracking-[0.2em] text-cyan-400">
           NODE CONFIGURATION
         </h3>
@@ -41,10 +49,11 @@ export default function NodeInspector({
   }
 
   const data = node.data;
-  const selectedModel = data.model ?? "gemini-3.8-flash";
+  const selectedModel = data.model ?? configuration?.defaultModel ?? "gemini-3.5-flash-lite";
+  const modelOptions = Array.from(new Set([selectedModel, ...(configuration?.providers.flatMap((provider) => provider.models) ?? [])]));
 
   return (
-    <aside className="w-[290px] shrink-0 overflow-y-auto border-l border-white/10 bg-slate-950/40 p-5">
+    <aside className="workflow-inspector w-[290px] shrink-0 overflow-y-auto border-l border-white/10 bg-slate-950/40 p-5">
       <h3 className="mb-5 border-b border-white/10 pb-3 font-mono text-sm tracking-[0.18em] text-cyan-400">
         {data.category === "AI AGENT"
           ? "AGENT CONFIGURATION"
@@ -143,7 +152,13 @@ export default function NodeInspector({
           <h4 className="font-mono text-[10px] tracking-[0.16em] text-cyan-400">
             {data.toolKind?.toUpperCase() ?? "TOOL"} SETTINGS
           </h4>
-          <label className="block text-xs text-slate-400" htmlFor="tool-operation">Operation</label>
+          {data.toolKind === "web-search" ? <div className="space-y-3">
+            <label className="block text-xs text-slate-400" htmlFor="web-search-query">Search query (or use the input path below)</label>
+            <textarea id="web-search-query" rows={3} maxLength={2000} value={data.searchQuery ?? ""} onChange={(event) => onUpdate({ searchQuery: event.target.value })} className="w-full rounded-lg border border-white/10 bg-black/40 p-2 text-xs" />
+            <label className="block text-xs text-slate-400" htmlFor="web-search-limit">Maximum sources</label>
+            <input id="web-search-limit" type="number" min={1} max={10} value={data.maxResults ?? 5} onChange={(event) => onUpdate({ maxResults: Number(event.target.value) })} className="w-full rounded-lg border border-white/10 bg-black/40 p-2 text-xs" />
+            <p className="text-xs leading-5 text-slate-400">Uses Gemini with Google Search. The server must enable web search and configure a Gemini key. Search results are evidence for the next node.</p>
+          </div> : <><label className="block text-xs text-slate-400" htmlFor="tool-operation">Operation</label>
           <select
             id="tool-operation"
             value={data.toolOperation ?? defaultOperation(data.toolKind)}
@@ -152,6 +167,7 @@ export default function NodeInspector({
           >
             {operationsFor(data.toolKind).map((operation) => <option key={operation.value} value={operation.value}>{operation.label}</option>)}
           </select>
+          </>}
 
           {data.toolKind !== "calculator" && data.toolKind !== "date" && (
             <div>
@@ -270,11 +286,10 @@ export default function NodeInspector({
                 focus:border-blue-500
               "
             >
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
-              <option value="gpt-5.5">GPT-5.5 (OpenAI)</option>
-              <option value="gpt-6-astra">GPT-6 Astra (OpenAI)</option>
+              {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
             </select>
+            <Link href="/settings" className="mt-2 block text-xs text-cyan-300">Check AI provider settings</Link>
+            {configuration && !configuration.available && <p role="status" className="mt-2 text-xs text-amber-200">{configuration.message}</p>}
           </div>
 
           <div className="mb-4">
@@ -293,7 +308,7 @@ export default function NodeInspector({
               <label className="mb-2 block text-xs text-slate-400" htmlFor="agent-thinking-level">Thinking level</label>
               <select
                 id="agent-thinking-level"
-                value={data.thinkingLevel ?? "medium"}
+                value={data.thinkingLevel ?? "low"}
                 onChange={(event) => onUpdate({ thinkingLevel: event.target.value as WorkflowNodeData["thinkingLevel"] })}
                 className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
               >
@@ -316,7 +331,7 @@ export default function NodeInspector({
           <div className="mb-5">
             <div className="mb-2 flex justify-between">
               <label className="text-xs text-slate-400" htmlFor="agent-max-tokens">Output token limit</label>
-              <span className="font-mono text-xs text-cyan-400">{data.maxTokens ?? 512}</span>
+              <span className="font-mono text-xs text-cyan-400">{data.maxTokens ?? 1024}</span>
             </div>
             <input
               id="agent-max-tokens"
@@ -324,7 +339,7 @@ export default function NodeInspector({
               min="64"
               max="4096"
               step="64"
-              value={data.maxTokens ?? 512}
+              value={data.maxTokens ?? 1024}
               onChange={(event) => onUpdate({ maxTokens: Number(event.target.value) })}
               className="w-full accent-blue-500"
             />
@@ -333,7 +348,7 @@ export default function NodeInspector({
           <div className="mb-5">
             <div className="mb-2 flex justify-between">
               <label className="text-xs text-slate-400" htmlFor="agent-timeout">Node timeout</label>
-              <span className="font-mono text-xs text-cyan-400">{Math.round((data.timeoutMs ?? 30000) / 1000)}s</span>
+              <span className="font-mono text-xs text-cyan-400">{Math.round((data.timeoutMs ?? 60000) / 1000)}s</span>
             </div>
             <input
               id="agent-timeout"
@@ -341,7 +356,7 @@ export default function NodeInspector({
               min="1000"
               max="60000"
               step="1000"
-              value={data.timeoutMs ?? 30000}
+              value={data.timeoutMs ?? 60000}
               onChange={(event) => onUpdate({ timeoutMs: Number(event.target.value) })}
               className="w-full accent-blue-500"
             />
@@ -390,16 +405,7 @@ export default function NodeInspector({
         </>
       )}
 
-      {/* Streaming */}
-      <div className="flex items-center justify-between border-t border-white/10 pt-4">
-        <span className="text-xs text-slate-400">
-          Streaming
-        </span>
-
-        <div className="h-5 w-9 rounded-full bg-blue-500/50 p-0.5">
-          <div className="ml-auto h-4 w-4 rounded-full bg-white" />
-        </div>
-      </div>
+      <p className="border-t border-white/10 pt-4 text-xs leading-5 text-slate-500">Execution status updates automatically while a run is active.</p>
     </aside>
   );
 }

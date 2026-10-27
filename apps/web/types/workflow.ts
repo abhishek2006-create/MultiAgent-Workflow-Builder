@@ -12,6 +12,7 @@ export type WorkflowNodeType =
   | "tool";
 
 export type WorkflowToolKind =
+  | "web-search"
   | "text"
   | "json"
   | "date"
@@ -47,7 +48,7 @@ export interface WorkflowNodeData {
   label: string;
   description: string;
   category: string;
-  status?: "idle" | "queued" | "running" | "completed" | "error" | "skipped";
+  status?: "idle" | "queued" | "running" | "waiting" | "completed" | "error" | "skipped";
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   toolKind?: WorkflowToolKind;
@@ -229,6 +230,7 @@ export interface PendingApproval {
 }
 
 export interface DashboardOverview {
+  updatedAt: string;
   workflowCount: number;
   executionCount: number;
   statuses: Record<string, number>;

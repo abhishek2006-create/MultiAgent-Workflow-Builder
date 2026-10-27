@@ -25,6 +25,15 @@ import { getApiBaseUrl } from "./api-url";
  */
 const BASE_URL = getApiBaseUrl();
 
+export interface AiConfiguration {
+  available: boolean;
+  message?: string;
+  defaultModel: string;
+  providers: Array<{ name: string; configured: boolean; models: string[] }>;
+  nodeTimeoutMs: number;
+  maxOutputTokens: number;
+}
+
 /**
  * Standard API error.
  */
@@ -226,6 +235,11 @@ async function request<T>(
  * Public API client.
  */
 export const api = {
+  ai: {
+    configuration(): Promise<AiConfiguration> {
+      return request("/ai/configuration");
+    },
+  },
   workflows: {
     /**
      * Get all workflows belonging to the

@@ -1,0 +1,39 @@
+name: Application checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: workflow
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: workflow_test
+        ports: ["5432:5432"]
+        options: --health-cmd="pg_isready -U workflow -d workflow_test" --health-interval=5s --health-timeout=3s --health-retries=10
+    env:
+      DATABASE_URL: postgresql://workflow:test-only-password@localhost:5432/workflow_test?schema=public
+      JWT_SECRET: ci-only-secret-never-use-for-real-accounts
+      AI_SERVICE_SECRET: ci-only-ai-secret-never-use-in-production
+      WEB_ORIGIN: http://localhost:3002
+      API_INTERNAL_URL: http://127.0.0.1:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: python -m venv apps/ai/.venv
+      - run: apps/ai/.venv/bin/python -m pip install -e apps/ai
+      - run: npm test
+      - run: npm --workspace apps/web run lint
+      - run: npm --workspace apps/web run build
+      - run: node scripts/smoke.cjs

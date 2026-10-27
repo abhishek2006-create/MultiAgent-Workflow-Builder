@@ -32,7 +32,10 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "gemini-3.8-flash",
+      model: "gemini-3.5-flash-lite",
+      timeoutMs: 60000,
+      thinkingLevel: "low",
+      maxTokens: 1024,
 
       instructions:
         "Analyze the user request and create a structured execution plan.",
@@ -56,7 +59,10 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "gemini-3.8-flash",
+      model: "gemini-3.5-flash-lite",
+      timeoutMs: 60000,
+      thinkingLevel: "low",
+      maxTokens: 1024,
 
       instructions:
         "Research the required information and return reliable findings.",
@@ -80,7 +86,10 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "gemini-3.8-flash",
+      model: "gemini-3.5-flash-lite",
+      timeoutMs: 60000,
+      thinkingLevel: "low",
+      maxTokens: 1024,
 
       instructions:
         "Implement the requested solution using clean production-quality code.",
@@ -104,7 +113,10 @@ export const defaultWorkflowNodes: WorkflowNode[] = [
       category: "AI AGENT",
 
       provider: "Google",
-      model: "gemini-3.8-flash",
+      model: "gemini-3.5-flash-lite",
+      timeoutMs: 60000,
+      thinkingLevel: "low",
+      maxTokens: 1024,
 
       instructions:
         "Review the result for correctness, quality and security.",

@@ -1,5 +1,7 @@
 # Implementation progress
 
+Current update: 2026-10-28. See [the completion review](completion-2026-10-28.md) for the real Planner 500 fix, full live Gemini flow, web search integration, workspace UI, isolated integration checks and remaining provider quota limitations. The October 17 notes below are historical.
+
 Updated: 2026-10-17
 
 ## Current task
