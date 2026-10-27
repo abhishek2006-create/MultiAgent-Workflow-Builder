@@ -31,7 +31,9 @@ function validateEnvironment(config: Record<string, unknown>) {
     throw new Error('API_PORT must be an integer between 1 and 65535');
   }
 
-  const aiTimeout = Number(config.AI_REQUEST_TIMEOUT_MS ?? 25_000);
+  // The AI service may make a second provider call when structured output is invalid.
+  // Allow the full bounded provider attempts to complete before the API aborts the request.
+  const aiTimeout = Number(config.AI_REQUEST_TIMEOUT_MS ?? 120_000);
   if (!Number.isInteger(aiTimeout) || aiTimeout < 1_000 || aiTimeout > 120_000) {
     throw new Error('AI_REQUEST_TIMEOUT_MS must be an integer between 1000 and 120000');
   }

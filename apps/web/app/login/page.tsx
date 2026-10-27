@@ -1162,6 +1162,7 @@ export default function LoginPage() {
         /* Login is a standalone auth screen: do not stack the app navbar above it. */
         body:has(.auth-page) > header,
         body:has(.auth-page) > nav:not(.authenticated-nav),
+         body:has(.auth-page) .site-shell > nav.top,
         body:has(.auth-page) .site-header,
         body:has(.auth-page) .site-navbar,
         body:has(.auth-page) [data-site-navbar] {
@@ -1203,7 +1204,7 @@ export default function LoginPage() {
               knowledge already connected to your workspace.
             </p>
 
-            <span className="tag bi">AI CORE ACTIVE · WORKSPACE ONLINE</span>
+            <span className="tag bi">VISUAL WORKFLOWS · HUMAN CONTROL</span>
 
             <div className="net bi">
               <svg viewBox="0 0 420 270" aria-label="Animated workflow preview">

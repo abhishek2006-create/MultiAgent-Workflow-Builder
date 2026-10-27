@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+import logging
 from typing import TypedDict
 
 import httpx
@@ -140,12 +141,44 @@ OPENAI_AGENT_CONTENT_SCHEMA = {
 }
 
 
+def provider_configuration() -> dict:
+    providers = []
+    for name, prefix, defaults in [
+        ("Gemini", "GEMINI", DEFAULT_GEMINI_MODELS),
+        ("OpenAI", "OPENAI", DEFAULT_OPENAI_MODELS),
+    ]:
+        configured_model = os.getenv(f"{prefix}_MODEL", "").strip()
+        configured_allowlist = os.getenv(f"{prefix}_ALLOWED_MODELS", "").strip()
+        models = sorted({value.strip() for value in configured_allowlist.split(",") if value.strip()}
+                        if configured_allowlist else defaults | ({configured_model} if configured_model else set()))
+        providers.append({"name": name, "configured": bool(os.getenv(f"{prefix}_API_KEY", "").strip()), "models": models})
+    default_model = (os.getenv("AI_DEFAULT_MODEL") or os.getenv("GEMINI_MODEL")
+                     or os.getenv("OPENAI_MODEL") or "gemini-3.5-flash-lite").strip()
+    return {"defaultModel": default_model, "providers": providers, "nodeTimeoutMs": 60000, "maxOutputTokens": 4096}
+
+
 async def support_agent(state: ChatState) -> ChatState:
+    # Bound the complete node, including SDK retries and structured-output repair.
+    # HTTP read timeouts alone restart for each request and can leave a node hung.
+    timeout_ms = state.get("timeout_ms") or _bounded_int_env(
+        "AI_PROVIDER_TIMEOUT_MS", default=60_000, minimum=1_000, maximum=60_000,
+    )
+    if type(timeout_ms) is not int or not 1_000 <= timeout_ms <= 60_000:
+        raise AIConfigurationError("timeout_ms must be between 1000 and 60000")
+    provider = _provider_for_model(state.get("model") or provider_configuration()["defaultModel"])
+    try:
+        async with asyncio.timeout(timeout_ms / 1000):
+            return await _support_agent(state)
+    except TimeoutError as error:
+        raise AIProviderTimeout(provider) from error
+
+
+async def _support_agent(state: ChatState) -> ChatState:
     configured_default = (
         os.getenv("AI_DEFAULT_MODEL")
         or os.getenv("GEMINI_MODEL")
         or os.getenv("OPENAI_MODEL")
-        or "gemini-3.8-flash"
+        or "gemini-3.5-flash-lite"
     ).strip()
     model_name = (state.get("model") or configured_default).strip()
     provider = _provider_for_model(model_name)
@@ -161,7 +194,7 @@ async def support_agent(state: ChatState) -> ChatState:
     allowed_models = (
         {model.strip() for model in configured_models.split(",") if model.strip()}
         if configured_models
-        else default_allowed
+        else default_allowed | ({os.getenv("GEMINI_MODEL" if provider == "Gemini" else "OPENAI_MODEL", "").strip()} - {""})
     )
     if not model_name or model_name not in allowed_models:
         allowed_summary = ", ".join(sorted(allowed_models)) or "none configured"
@@ -171,7 +204,7 @@ async def support_agent(state: ChatState) -> ChatState:
         )
 
     temperature = state.get("temperature", 0.0)
-    thinking_level = state.get("thinking_level", "medium")
+    thinking_level = state.get("thinking_level") or "low"
     max_output_tokens = state.get("max_output_tokens", 1024)
     timeout_ms = state.get("timeout_ms") or _bounded_int_env(
         "AI_PROVIDER_TIMEOUT_MS", default=60_000, minimum=1_000, maximum=60_000,
@@ -219,17 +252,17 @@ async def support_agent(state: ChatState) -> ChatState:
             )
         try:
             if provider == "Gemini":
-                raw_text, usage = await _generate_gemini(
+                raw_text, call_usage = await _generate_gemini(
                     prompt=f"{attempt_instructions}\n\nSupplied input:\n{customer_message}",
                     model_name=model_name,
                     temperature=float(temperature),
-                    thinking_level=thinking_level or "medium",
+                    thinking_level=thinking_level,
                     max_output_tokens=max_output_tokens,
                     timeout_ms=timeout_ms,
                     api_key=api_key,
                 )
             else:
-                raw_text, usage = await _generate_openai(
+                raw_text, call_usage = await _generate_openai(
                     instructions=attempt_instructions,
                     customer_message=customer_message,
                     model_name=model_name,
@@ -238,6 +271,8 @@ async def support_agent(state: ChatState) -> ChatState:
                     api_key=api_key,
                 )
 
+            if call_usage is not None:
+                usage = {key: (usage or {}).get(key, 0) + call_usage[key] for key in ("inputTokens", "outputTokens", "totalTokens")}
             parsed = json.loads(raw_text)
             result = AgentContent.model_validate(parsed)
             break
@@ -275,7 +310,9 @@ async def _generate_gemini(
     except ImportError as error:
         raise AIConfigurationError("Install the apps/ai dependencies to use Gemini") from error
 
-    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_ms))
+    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(
+        timeout=timeout_ms, retry_options=types.HttpRetryOptions(attempts=1),
+    ))
     try:
         response = None
         config_values = {
@@ -311,7 +348,10 @@ async def _generate_gemini(
             raise AIInvalidOutput("Gemini returned an empty response")
         return response.text, _usage_metadata(getattr(response, "usage_metadata", None))
     finally:
-        await client.aio.aclose()
+        try:
+            await asyncio.wait_for(client.aio.aclose(), timeout=2)
+        except Exception as error:
+            logging.getLogger("flowforge.ai").warning("provider_cleanup_failed provider=Gemini type=%s", type(error).__name__)
 
 
 async def _generate_openai(
@@ -385,7 +425,9 @@ def _provider_for_model(model_name: str) -> str:
     raise AIConfigurationError("Choose a supported Gemini or GPT model in the node settings")
 
 
-def _classified_provider_error(provider: str, status_code: int | None) -> AIProviderError:
+def _classified_provider_error(provider: str, status_code: int | None) -> AIProviderError | AIProviderTimeout:
+    if status_code in {408, 504}:
+        return AIProviderTimeout(provider)
     error_type: type[AIProviderError]
     if status_code in {401, 403}:
         error_type = AIProviderAuthenticationError

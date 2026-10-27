@@ -1,8 +1,8 @@
 import { ExecutionContext, Injectable } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { ConfiguredOAuthGuard } from "../oauth-config";
 
 @Injectable()
-export class GoogleCallbackAuthGuard extends AuthGuard("google") {
+export class GoogleCallbackAuthGuard extends ConfiguredOAuthGuard("google") {
   handleRequest<TUser = unknown>(
     err: unknown,
     user: TUser | null | undefined,

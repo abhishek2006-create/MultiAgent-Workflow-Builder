@@ -93,6 +93,7 @@ export function TopNav() {
             <Link className="tab" href="/approvals">
               Approvals
             </Link>
+            <Link className="tab" href="/settings">Settings</Link>
             <Link className="tab" href="/workflows/demo">
               Workflow builder
             </Link>
@@ -127,7 +128,7 @@ export function TopNav() {
       )}
       <div className="stat">
         <b />
-        SYSTEM ONLINE · AI CORE ACTIVE
+        <Link href="/settings">CHECK SERVICE STATUS</Link>
       </div>
     </nav>
   );

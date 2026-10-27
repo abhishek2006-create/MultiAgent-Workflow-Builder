@@ -1,0 +1,82 @@
+{
+  "name": "Order Total — Calculate, Review and Approve",
+  "description": "Calculate an order total, let Gemini review the result, and require human approval before returning the output.",
+  "nodes": [
+    {
+      "id": "input",
+      "type": "input",
+      "position": { "x": 80, "y": 200 },
+      "data": {
+        "label": "Order Input",
+        "description": "Price, quantity and delivery charge",
+        "category": "CORE",
+        "inputSchema": {
+          "type": "object",
+          "required": ["price", "quantity", "delivery"],
+          "properties": {
+            "request": { "type": "string", "maxLength": 500 },
+            "price": { "type": "number", "minimum": 0 },
+            "quantity": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "delivery": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "calculate",
+      "type": "tool",
+      "position": { "x": 370, "y": 200 },
+      "data": {
+        "label": "Calculate Total",
+        "description": "Price × quantity + delivery",
+        "category": "TOOLS",
+        "toolKind": "calculator",
+        "expression": "price * quantity + delivery"
+      }
+    },
+    {
+      "id": "review",
+      "type": "reviewer",
+      "position": { "x": 660, "y": 200 },
+      "data": {
+        "label": "AI Review",
+        "description": "Gemini verifies the order total",
+        "category": "AI AGENT",
+        "agentType": "reviewer",
+        "model": "gemini-3.5-flash-lite",
+        "instructions": "Check upstream.calculate.value against request.price multiplied by request.quantity plus request.delivery. State the numeric total clearly in message. Set review_passed true only if the calculation is correct. Keep the answer under 100 words. Do not claim to run tests or browse the web. Leave code_proposal null and sources empty.",
+        "temperature": 0.2,
+        "maxTokens": 1024,
+        "timeoutMs": 60000,
+        "maxRetries": 1
+      }
+    },
+    {
+      "id": "approval",
+      "type": "approval",
+      "position": { "x": 950, "y": 200 },
+      "data": {
+        "label": "Human Approval",
+        "description": "Approve the checked total to continue",
+        "category": "CONTROL"
+      }
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "position": { "x": 1240, "y": 200 },
+      "data": {
+        "label": "Approved Result",
+        "description": "Reviewed result and approval decision",
+        "category": "CORE"
+      }
+    }
+  ],
+  "edges": [
+    { "id": "input-calculate", "source": "input", "target": "calculate" },
+    { "id": "calculate-review", "source": "calculate", "target": "review" },
+    { "id": "review-approval", "source": "review", "target": "approval" },
+    { "id": "approval-output", "source": "approval", "target": "output" }
+  ]
+}

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { ConfiguredOAuthGuard } from "../oauth-config";
 
 @Injectable()
-export class GithubAuthGuard extends AuthGuard("github") {}
+export class GithubAuthGuard extends ConfiguredOAuthGuard("github") {}

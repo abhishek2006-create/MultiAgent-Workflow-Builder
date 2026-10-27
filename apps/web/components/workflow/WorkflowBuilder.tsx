@@ -636,6 +636,7 @@ import type {
 } from "@xyflow/react";
 
 import NodeInspector from "./NodeInspector";
+import SearchSources from "./SearchSources";
 import NodePalette from "./NodePalette";
 import WorkflowCanvas from "./WorkflowCanvas";
 import WorkflowToolbar from "./WorkflowToolbar";
@@ -648,6 +649,8 @@ import {
   useWorkflowApi,
 } from "../../hooks/useWorkflowApi";
 import { api } from "../../lib/api";
+import { defaultRuntimeInput, exampleRuntimeInput } from "../../lib/workflow/runtimeInput";
+import { executionEdges } from "../../lib/workflow/executionEdges";
 
 import type {
   CreateWorkflowRequest,
@@ -702,10 +705,13 @@ export default function WorkflowBuilder({
       (state) => state.isSaving,
     );
 
+  const [isActing, setIsActing] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [showRunDialog, setShowRunDialog] = useState(false);
-  const [runInputText, setRunInputText] = useState("{}");
+  const [runInputText, setRunInputText] = useState(JSON.stringify(defaultRuntimeInput, null, 2));
   const [runInputError, setRunInputError] = useState<string | null>(null);
+  const [validationNotice, setValidationNotice] = useState<string | null>(null);
+  useEffect(() => setValidationNotice(null), [nodes, edges]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -733,7 +739,7 @@ export default function WorkflowBuilder({
         return;
       }
       setPlaybackNodeId(completedSteps[current].nodeId);
-    }, 450);
+    }, 1100);
     return () => window.clearInterval(timer);
   }, [executionId, executionStatus]);
 
@@ -794,10 +800,7 @@ export default function WorkflowBuilder({
       ],
     );
 
-  const liveStep = executionDetails?.steps?.find((step) =>
-    step.status === "RUNNING" || step.status === "WAITING_APPROVAL",
-  );
-  const highlightedNodeId = liveStep?.nodeId ?? playbackNodeId;
+  const runningNodeIds = useMemo(() => new Set(executionDetails?.steps?.filter((step) => step.status === "RUNNING").map((step) => step.nodeId)), [executionDetails]);
   const invalidNodeIds = useMemo(
     () => new Set(validationErrors.flatMap((issue) => issue.nodeId ? [issue.nodeId] : [])),
     [validationErrors],
@@ -808,8 +811,10 @@ export default function WorkflowBuilder({
       const step = steps.get(node.id);
       const status = invalidNodeIds.has(node.id)
         ? "error"
-        : node.id === highlightedNodeId
+        : runningNodeIds.has(node.id)
         ? "running"
+        : step?.status === "WAITING_APPROVAL"
+          ? "waiting"
         : step?.status === "COMPLETED"
           ? "completed"
           : step?.status === "FAILED"
@@ -819,28 +824,11 @@ export default function WorkflowBuilder({
             : executionStatus === "QUEUED"
               ? "queued"
               : node.data.status ?? "idle";
-      return { ...node, data: { ...node.data, status } };
+      return { ...node, data: { ...node.data, status, executionPlayback: node.id === playbackNodeId } };
     });
-  }, [nodes, executionDetails, executionStatus, highlightedNodeId, invalidNodeIds]);
+  }, [nodes, executionDetails, executionStatus, runningNodeIds, playbackNodeId, invalidNodeIds]);
 
-  const displayedEdges = useMemo(() => {
-    const completed = new Set(
-      executionDetails?.steps?.filter((step) => step.status === "COMPLETED").map((step) => step.nodeId) ?? [],
-    );
-    return edges.map((edge) => {
-      const flowing = Boolean(highlightedNodeId && edge.target === highlightedNodeId);
-      const complete = completed.has(edge.source) && completed.has(edge.target);
-      return {
-        ...edge,
-        animated: flowing,
-        style: {
-          ...edge.style,
-          stroke: flowing ? "#67e8f9" : complete ? "#34d399" : "rgba(100,180,255,0.35)",
-          strokeWidth: flowing ? 3 : complete ? 2.2 : 1.6,
-        },
-      };
-    });
-  }, [edges, executionDetails, highlightedNodeId]);
+  const displayedEdges = useMemo(() => executionEdges(edges, executionDetails?.steps, playbackNodeId), [edges, executionDetails, playbackNodeId]);
 
   const workflowIsExecuting = ["QUEUED", "RUNNING", "WAITING_APPROVAL"].includes(executionStatus);
 
@@ -874,7 +862,7 @@ export default function WorkflowBuilder({
       return;
     }
 
-    void loadWorkflow(workflowId);
+    if (useWorkflowStore.getState().workflowId !== workflowId) void loadWorkflow(workflowId);
   }, [
     initializeNewWorkflow,
     workflowId,
@@ -916,10 +904,12 @@ export default function WorkflowBuilder({
                 ? "AI AGENT"
                 : "CORE",
           ...(toolKind ? { toolKind } : {}),
+          ...(["agent", "llm", "reviewer"].includes(type) ? { timeoutMs: 60000, maxTokens: 1024, thinkingLevel: "low" as const } : {}),
           ...(toolKind === "calculator" ? { expression: "1 + 1" } : {}),
           ...(toolKind === "text" ? { toolOperation: "uppercase", inputPath: "input.message" } : {}),
           ...(toolKind === "json" ? { toolOperation: "parse", inputPath: "input.json" } : {}),
           ...(toolKind === "date" ? { toolOperation: "now" } : {}),
+          ...(toolKind === "web-search" ? { inputPath: "input.query", maxResults: 5 } : {}),
           ...(type === "condition"
             ? { conditionPath: "input.message", conditionOperator: "exists" as const }
             : {}),
@@ -974,6 +964,7 @@ export default function WorkflowBuilder({
     useCallback(async () => {
       try {
         const saved = await saveWorkflow();
+        setValidationNotice(useWorkflowStore.getState().isDirty ? "Version saved. Newer edits still need saving." : `Saved version ${saved.version}.`);
         if (workflowId === "demo" || !workflowId) {
           router.replace(`/workflows/${encodeURIComponent(saved.id)}`);
         }
@@ -988,11 +979,15 @@ export default function WorkflowBuilder({
 
   const handleValidate =
     useCallback(async () => {
+      setValidationNotice(null);
+      setIsActing(true);
       try {
-        await validateWorkflow();
+        const result = await validateWorkflow();
+        if (result.valid) setValidationNotice("Workflow graph is valid.");
       } catch {
         // Store already contains error.
       }
+      finally { setIsActing(false); }
     }, [validateWorkflow]);
 
   /* ================================== */
@@ -1000,9 +995,12 @@ export default function WorkflowBuilder({
   /* ================================== */
 
   const handleRun = useCallback(() => {
+    if (runInputText === JSON.stringify(defaultRuntimeInput, null, 2)) {
+      setRunInputText(JSON.stringify(exampleRuntimeInput(nodes), null, 2));
+    }
     setRunInputError(null);
     setShowRunDialog(true);
-  }, []);
+  }, [nodes, runInputText]);
 
   const handleRunSubmit =
     useCallback(async () => {
@@ -1030,10 +1028,13 @@ export default function WorkflowBuilder({
           router.replace(`/workflows/${encodeURIComponent(saved.id)}`);
         }
 
+        if (useWorkflowStore.getState().isDirty) {
+          throw new Error("The canvas changed while saving. Save your latest edits before starting the run.");
+        }
         await runWorkflow(input);
         setShowRunDialog(false);
-      } catch {
-        // Store already contains error.
+      } catch (cause) {
+        useWorkflowStore.getState().setError(cause instanceof Error ? cause.message : "Unable to start run.");
       } finally {
         setIsRunning(false);
       }
@@ -1052,6 +1053,7 @@ export default function WorkflowBuilder({
       useWorkflowStore.getState().setError("Workflow import must be 1 MB or smaller.");
       return;
     }
+    setIsActing(true);
     try {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isRecord(parsed) || typeof parsed.name !== "string" || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
@@ -1069,7 +1071,7 @@ export default function WorkflowBuilder({
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Unable to import workflow.";
       useWorkflowStore.getState().setError(message);
-    }
+    } finally { setIsActing(false); }
   }, [router]);
 
   const handleExport = useCallback(() => {
@@ -1106,6 +1108,15 @@ export default function WorkflowBuilder({
     }
   }, [isRunning, retryExecution]);
 
+  const handleApproval = async (approvalId: string, approved: boolean) => {
+    setIsActing(true);
+    try {
+      await resolveApproval(approvalId, approved);
+    } catch (cause) {
+      useWorkflowStore.getState().setError(cause instanceof Error ? cause.message : "Unable to resolve approval.");
+    } finally { setIsActing(false); }
+  };
+
   const handleCanvasInit = useCallback(
     (instance: ReactFlowInstance<Node<WorkflowNodeData>, Edge>) => {
       requestAnimationFrame(() => {
@@ -1116,13 +1127,17 @@ export default function WorkflowBuilder({
   );
 
   return (
-    <section className="flex h-screen flex-col bg-[#05070b] text-white">
+    <section className="workflow-builder flex h-[calc(100dvh-62px)] min-h-[620px] flex-col bg-[#05070b] text-white">
       <WorkflowToolbar
         workflowName={name}
         workflowId={savedWorkflowId}
+        isDirty={isDirty}
+        isSaving={isSaving}
+        isBusy={isActing || isRunning || isLoading}
+        onRename={(nextName) => useWorkflowStore.getState().setWorkflowMetadata({ name: nextName })}
         onSave={handleSave}
         onValidate={handleValidate}
-        onCancel={() => void cancelExecution().catch(() => undefined)}
+        onCancel={() => { setIsActing(true); void cancelExecution().catch(() => undefined).finally(() => setIsActing(false)); }}
         onRun={handleRun}
         onImport={handleImport}
         onExport={handleExport}
@@ -1130,7 +1145,7 @@ export default function WorkflowBuilder({
       />
 
       {executionDetails && (
-        <section aria-label="Execution console" className="border-b border-white/10 bg-slate-950/80 px-5 py-3">
+        <section aria-label="Execution console" className="workflow-execution-console border-b border-white/10 bg-slate-950/80 px-5 py-3">
           <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-slate-400">
             <span>Execution {executionDetails.id.slice(0, 12)}</span>
             <div className="flex items-center gap-3">
@@ -1161,17 +1176,20 @@ export default function WorkflowBuilder({
               {JSON.stringify(executionDetails.output, null, 2)}
             </pre>
           )}
+          {executionDetails.steps?.map((step) => <SearchSources key={step.id} value={step.output} />)}
         </section>
       )}
 
       {error && (
-        <div className="border-b border-red-500/20 bg-red-500/10 px-5 py-2 text-xs text-red-300">
+        <div className="workflow-alert border-b border-red-500/20 bg-red-500/10 px-5 py-2 text-xs text-red-300">
           {error}
         </div>
       )}
 
+      {validationNotice && <p role="status" className="border-b border-emerald-400/20 bg-emerald-400/5 px-5 py-2 text-xs text-emerald-200">{validationNotice}</p>}
+
       {(validationErrors.length > 0 || validationWarnings.length > 0) && (
-        <section aria-label="Workflow validation results" className="max-h-36 overflow-y-auto border-b border-amber-300/15 bg-slate-950/90 px-5 py-3">
+        <section aria-label="Workflow validation results" className="workflow-validation max-h-36 overflow-y-auto border-b border-amber-300/15 bg-slate-950/90 px-5 py-3">
           {validationErrors.length > 0 && <>
             <h2 className="mb-2 font-mono text-[10px] tracking-wider text-rose-300">VALIDATION ERRORS · {validationErrors.length}</h2>
             <ul className="space-y-1 text-xs text-rose-200">
@@ -1192,10 +1210,10 @@ export default function WorkflowBuilder({
       {executionStatus === "WAITING_APPROVAL" && executionId && executionDetails?.approvals
         ?.filter((approval) => approval.status === "PENDING")
         .map((approval) => (
-          <div key={approval.id} className="flex items-center gap-3 border-b border-amber-400/20 bg-amber-400/10 px-5 py-3 text-xs text-amber-100">
+          <div key={approval.id} className="workflow-approval-banner flex items-center gap-3 border-b border-amber-400/20 bg-amber-400/10 px-5 py-3 text-xs text-amber-100">
             <span className="flex-1">This run is waiting for a workspace member to approve the next step.</span>
-            <button type="button" className="rounded border border-emerald-400/30 px-3 py-1" onClick={() => void resolveApproval(approval.id, true).catch(() => undefined)}>Approve</button>
-            <button type="button" className="rounded border border-rose-400/30 px-3 py-1" onClick={() => void resolveApproval(approval.id, false).catch(() => undefined)}>Reject</button>
+            <button type="button" className="rounded border border-emerald-400/30 px-3 py-1" disabled={isActing} onClick={() => void handleApproval(approval.id, true)}>Approve</button>
+            <button type="button" className="rounded border border-rose-400/30 px-3 py-1" disabled={isActing} onClick={() => void handleApproval(approval.id, false)}>Reject</button>
           </div>
         ))}
 
@@ -1207,7 +1225,7 @@ export default function WorkflowBuilder({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="workflow-workspace flex min-h-0 flex-1">
         <NodePalette
           onAddNode={handleAddNode}
         />
@@ -1216,6 +1234,8 @@ export default function WorkflowBuilder({
           nodes={displayedNodes}
           edges={displayedEdges}
           isRunning={isRunning || workflowIsExecuting}
+          isReplaying={playbackNodeId !== null}
+          isWaiting={executionStatus === "WAITING_APPROVAL"}
           canvasRef={canvasRef}
           onInit={handleCanvasInit}
           onNodesChange={onNodesChange}

@@ -1131,6 +1131,7 @@ export default function SignupPage() {
         /* Signup is a standalone auth screen: do not stack the app navbar above it. */
         body:has(.auth-page) > header,
         body:has(.auth-page) > nav:not(.authenticated-nav),
+         body:has(.auth-page) .site-shell > nav.top,
         body:has(.auth-page) .site-header,
         body:has(.auth-page) .site-navbar,
         body:has(.auth-page) [data-site-navbar] {
@@ -1172,7 +1173,7 @@ export default function SignupPage() {
               into workflows you can actually see.
             </p>
 
-            <span className="tag bi">AI CORE ACTIVE · FREE TO START</span>
+            <span className="tag bi">VISUAL WORKFLOWS · HUMAN CONTROL</span>
 
             <div className="net bi">
               <svg viewBox="0 0 420 270" aria-label="Animated workflow preview">
@@ -1282,7 +1283,7 @@ export default function SignupPage() {
               <h2 className="fi">CREATE YOUR ACCOUNT</h2>
 
               <p className="sub fi">
-                Welcome ! Your workflows kept running while you were away.
+                Create your account and start building your first workflow.
               </p>
 
               <div className="soc fi">

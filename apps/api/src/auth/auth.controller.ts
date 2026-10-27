@@ -51,7 +51,11 @@ export class AuthController {
   @Get("me")
   @UseGuards(JwtAuthGuard)
   me(@Req() request: AuthenticatedRequest) {
-    return this.auth.getProfile(request.user.sub);
+    return this.auth.getProfile(request.user.sub).then((profile) => ({
+      ...profile,
+      organizationId: request.user.organizationId,
+      role: request.user.role,
+    }));
   }
 
   @Post("logout")

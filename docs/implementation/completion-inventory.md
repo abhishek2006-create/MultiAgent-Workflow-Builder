@@ -1,5 +1,7 @@
 # Project completion inventory
 
+**Current review (28 October 2026): [completion-2026-10-28.md](completion-2026-10-28.md).** The inventory below is retained as the historical October 17 audit and is superseded by that current review.
+
 Audit date: 2026-10-17. This describes the current source tree after repairing the broken merge content and implementing the remaining local work that can be verified without deployment, a running database, or provider credentials.
 
 ## Repository and baseline

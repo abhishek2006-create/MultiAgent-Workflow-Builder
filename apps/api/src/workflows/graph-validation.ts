@@ -29,6 +29,7 @@ const TOOL_KINDS = new Set([
   "text",
   "json",
   "date",
+  "web-search",
 ]);
 const AGENT_TYPES = new Set(["support", "planner", "research", "coding", "reviewer"]);
 const AGENT_MODELS = new Set([
@@ -114,6 +115,15 @@ export function validateWorkflowGraph(
       (typeof item.data.expression !== "string" || !item.data.expression.trim() || item.data.expression.length > 500)) {
       errors.push({ code: "INVALID_CALCULATOR_EXPRESSION", message: `Calculator node "${nodeId}" requires an expression up to 500 characters.`, nodeId });
     }
+    if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "web-search") {
+      if ((item.data.searchQuery !== undefined && (typeof item.data.searchQuery !== "string" || item.data.searchQuery.length > 2000)) ||
+          (!item.data.searchQuery && !item.data.inputPath)) {
+        errors.push({ code: "INVALID_SEARCH_QUERY", message: `Web search node "${nodeId}" needs a query up to 2000 characters or an input field path.`, nodeId });
+      }
+      if (item.data.maxResults !== undefined && (!Number.isInteger(item.data.maxResults) || Number(item.data.maxResults) < 1 || Number(item.data.maxResults) > 10)) {
+        errors.push({ code: "INVALID_SEARCH_LIMIT", message: `Web search node "${nodeId}" must request 1–10 sources.`, nodeId });
+      }
+    }
     if (nodeType === "tool" && isRecord(item.data) && item.data.toolKind === "text" &&
       !new Set(["trim", "uppercase", "lowercase", "replace"]).has(String(item.data.toolOperation))) {
       errors.push({ code: "INVALID_TEXT_OPERATION", message: `Text node "${nodeId}" has an unsupported operation.`, nodeId });
@@ -173,7 +183,8 @@ export function validateWorkflowGraph(
         (typeof item.data.inputPath !== "string" || item.data.inputPath.length > 200)) {
         errors.push({ code: "INVALID_AGENT_INPUT_PATH", message: `Node "${nodeId}" input mapping must be a path up to 200 characters.`, nodeId });
       }
-      if (item.data.model !== undefined && (typeof item.data.model !== "string" || !AGENT_MODELS.has(item.data.model))) {
+      if (item.data.model !== undefined && (typeof item.data.model !== "string" ||
+        (!AGENT_MODELS.has(item.data.model) && !/^(?:gemini|gpt)-[a-zA-Z0-9._:-]{1,90}$/.test(item.data.model)))) {
         errors.push({ code: "UNSUPPORTED_AGENT_MODEL", message: `Node "${nodeId}" must use a supported OpenAI or Gemini model.`, nodeId });
       }
       if (item.data.temperature !== undefined &&

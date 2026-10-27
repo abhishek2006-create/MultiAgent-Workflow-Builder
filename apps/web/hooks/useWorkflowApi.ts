@@ -29,11 +29,6 @@ export function useWorkflowApi() {
       (state) => state.setError,
     );
 
-  const markClean =
-    useWorkflowStore(
-      (state) => state.markClean,
-    );
-
   const setValidationResult =
     useWorkflowStore(
       (state) =>
@@ -99,6 +94,7 @@ export function useWorkflowApi() {
       const state =
         useWorkflowStore.getState();
 
+      if (state.isSaving) throw new Error("A save is already in progress.");
       setSaving(true);
       setError(null);
 
@@ -125,8 +121,7 @@ export function useWorkflowApi() {
             );
         }
 
-        hydrate(workflow);
-        markClean();
+        useWorkflowStore.getState().acceptSaved(workflow, state);
 
         return workflow;
       } catch (error) {
@@ -143,8 +138,6 @@ export function useWorkflowApi() {
       }
     },
     [
-      hydrate,
-      markClean,
       setError,
       setSaving,
     ],
@@ -152,23 +145,13 @@ export function useWorkflowApi() {
 
   const validateWorkflow =
     useCallback(async () => {
-      const {
-        workflowId,
-      } = useWorkflowStore.getState();
-
-      if (!workflowId) {
-        throw new Error(
-          "Save the workflow before validating it.",
-        );
-      }
+      const state = useWorkflowStore.getState();
 
       setError(null);
 
       try {
         const result =
-          await api.workflows.validate(
-            workflowId,
-          );
+          await api.workflows.validateDefinition({ nodes: state.nodes, edges: state.edges });
 
         setValidationResult(result.errors, result.warnings);
 
@@ -248,9 +231,10 @@ export function useWorkflowApi() {
     if (!state.executionId) throw new Error("No active execution to approve.");
     const result = await api.workflows.resolveApproval(state.executionId, approvalId, approved, comment);
     setExecution(state.executionId, result.executionStatus);
+    if (state.workflowId) setExecutionDetails(await api.workflows.execution(state.workflowId, state.executionId));
     if (state.workflowId && approved) void monitorExecution(state.workflowId, state.executionId);
     return result;
-  }, [monitorExecution, setExecution]);
+  }, [monitorExecution, setExecution, setExecutionDetails]);
 
   const retryExecution = useCallback(async () => {
     const state = useWorkflowStore.getState();
@@ -281,12 +265,13 @@ export function useWorkflowApi() {
     try {
       await api.executions.cancel(state.executionId);
       setExecution(state.executionId, "CANCELLED");
+      if (state.workflowId) setExecutionDetails(await api.workflows.execution(state.workflowId, state.executionId));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to cancel execution.";
       setError(message);
       throw error;
     }
-  }, [setError, setExecution]);
+  }, [setError, setExecution, setExecutionDetails]);
 
   return {
     loadWorkflow,

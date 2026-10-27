@@ -33,6 +33,7 @@ const groups: { name: string; nodes: PaletteNode[] }[] = [
   {
     name: "TOOLS",
     nodes: [
+      { type: "tool", toolKind: "web-search", icon: "WEB", label: "Web Search" },
       { type: "tool", toolKind: "calculator", icon: "CALC", label: "Calculator" },
       { type: "tool", toolKind: "text", icon: "TXT", label: "Text Transform" },
       { type: "tool", toolKind: "json", icon: "JSON", label: "JSON Utility" },
@@ -51,7 +52,7 @@ export default function NodePalette({
   onAddNode,
 }: NodePaletteProps) {
   return (
-    <aside className="w-[210px] shrink-0 overflow-y-auto border-r border-white/10 bg-slate-950/40 p-4">
+    <aside className="workflow-sidebar w-[210px] shrink-0 overflow-y-auto border-r border-white/10 bg-slate-950/40 p-4">
       <h3 className="mb-5 font-mono text-xs font-bold tracking-[0.15em] text-slate-200">
         NODE LIBRARY
       </h3>

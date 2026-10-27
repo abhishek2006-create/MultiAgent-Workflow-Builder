@@ -42,6 +42,8 @@ export default function WorkflowNode({
   const statusLabel =
     status === "running"
       ? "RUNNING"
+      : status === "waiting"
+        ? "WAITING"
       : status === "completed"
         ? "DONE"
         : status === "queued"
@@ -54,6 +56,8 @@ export default function WorkflowNode({
   const statusColor =
     status === "running"
       ? "text-cyan-300"
+      : status === "waiting"
+        ? "text-amber-300"
       : status === "completed"
         ? "text-emerald-400"
         : status === "skipped"
@@ -98,7 +102,7 @@ export default function WorkflowNode({
             : ""
         }
         ${
-          status === "running"
+          status === "running" || nodeData.executionPlayback
             ? "workflow-node-running border-cyan-300/90 shadow-[0_0_38px_rgba(34,211,238,0.25)]"
             : ""
         }
@@ -106,7 +110,7 @@ export default function WorkflowNode({
     >
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-cyan-300 transition-shadow hover:!shadow-[0_0_12px_rgba(34,211,238,0.9)]"
       />
 
@@ -127,6 +131,8 @@ export default function WorkflowNode({
             className={`h-1.5 w-1.5 rounded-full ${
               status === "running"
                 ? "animate-pulse bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)]"
+                : status === "waiting"
+                  ? "bg-amber-300"
                 : status === "completed"
                   ? "bg-emerald-400"
                   : status === "error"
@@ -166,16 +172,16 @@ export default function WorkflowNode({
           <Handle
             id="true"
             type="source"
-            position={Position.Bottom}
-            style={{ left: "35%" }}
+            position={Position.Right}
+            style={{ top: "35%" }}
             aria-label="Condition true output"
             className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-emerald-400 transition-shadow hover:!shadow-[0_0_12px_rgba(52,211,153,0.9)]"
           />
           <Handle
             id="false"
             type="source"
-            position={Position.Bottom}
-            style={{ left: "65%" }}
+            position={Position.Right}
+            style={{ top: "65%" }}
             aria-label="Condition false output"
             className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-rose-400 transition-shadow hover:!shadow-[0_0_12px_rgba(251,113,133,0.9)]"
           />
@@ -183,7 +189,7 @@ export default function WorkflowNode({
       ) : (
         <Handle
           type="source"
-          position={Position.Bottom}
+          position={Position.Right}
           className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-blue-400 transition-shadow hover:!shadow-[0_0_12px_rgba(96,165,250,0.9)]"
         />
       )}

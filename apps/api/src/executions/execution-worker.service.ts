@@ -39,8 +39,8 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
     this.working = true;
     try {
       const executionId = await this.prisma.$transaction(async (tx) => {
-        const candidates = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT e."id"
+        const candidates = await tx.$queryRaw<Array<{ id: string; startedAt: Date | null }>>`
+          SELECT e."id", e."startedAt"
           FROM "WorkflowExecution" e
           LEFT JOIN "ExecutionWorkerLease" l ON l."executionId" = e."id"
           WHERE (
@@ -62,7 +62,7 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
         });
         const claimed = await tx.workflowExecution.updateMany({
           where: { id: candidate.id, status: { in: ["QUEUED", "RUNNING"] } },
-          data: { status: "RUNNING", startedAt: now, error: null },
+          data: { status: "RUNNING", startedAt: candidate.startedAt ?? now, error: null },
         });
         if (claimed.count !== 1) {
           await tx.executionWorkerLease.deleteMany({ where: { executionId: candidate.id, workerId: this.workerId } });
@@ -234,6 +234,11 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
         activeNodeId = node.id;
         const allIncoming = edges.filter((edge) => edge.target === node.id);
         const incoming = this.activeIncomingEdges(allIncoming, nodesById, outputs);
+        if (allIncoming.length > 0 && incoming.length === 0) {
+          await this.persistSkippedStep(executionId, node);
+          processed.add(node.id);
+          continue;
+        }
         const nodeInput = incoming.length === 0
           ? runInput
           : Object.fromEntries(incoming.map((edge) => [edge.source, outputs.get(edge.source)]));
@@ -326,14 +331,14 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
           ? resolveInputPath(input, data.inputPath)
           : input;
         if (mappedInput === undefined) throw new Error(`AI node "${node.id}" input mapping did not resolve`);
-        const message = typeof data.instructions === "string" && data.instructions.trim()
-          ? `${data.instructions.trim()}\n\nWorkflow input:\n${JSON.stringify(mappedInput)}`
-          : JSON.stringify(mappedInput);
-        if (message.length > 8_000) throw new Error("AI node input must be 8,000 characters or smaller");
+        const message = JSON.stringify(data.inputPath ? mappedInput : { request: runInput, upstream: mappedInput },
+          (key, value) => key === "searchSuggestionsHtml" ? undefined : value);
+        if (message.length > 8_000) throw new Error("AI node input exceeds 8,000 characters. Configure an input mapping to select the fields this node needs.");
         const agentType = resolveAgentType(node.type, data);
-        const selectedModel = data.model === "Gemini" ? "gemini-3.8-flash" : data.model;
+        const selectedModel = data.model === "Gemini" ? "gemini-3.5-flash-lite" : data.model;
         const result = await this.ai.support({
           customer_message: message,
+          ...(typeof data.instructions === "string" ? { instructions: data.instructions } : {}),
           agent_type: agentType,
           ...(typeof selectedModel === "string" && /^(gemini|gpt)-/.test(selectedModel) ? { model: selectedModel } : {}),
           ...(typeof data.temperature === "number" ? { temperature: data.temperature } : {}),
@@ -347,6 +352,11 @@ export class ExecutionWorkerService implements OnModuleInit, OnModuleDestroy {
         return evaluateCondition(node.data ?? {}, input);
       case "tool": {
         const toolKind = node.data?.toolKind;
+        if (toolKind === "web-search") {
+          const query = node.data?.searchQuery || resolveInputPath(input, String(node.data?.inputPath ?? "input.query"));
+          if (typeof query !== "string" || !query.trim() || query.length > 2000) throw new Error("Web search requires a query of 1–2000 characters.");
+          return this.ai.search(query.trim(), Number(node.data?.maxResults ?? 5));
+        }
         if (!["calculator", "text", "json", "date"].includes(String(toolKind))) {
           throw new Error(`Tool kind "${String(toolKind ?? "unknown")}" is not enabled`);
         }

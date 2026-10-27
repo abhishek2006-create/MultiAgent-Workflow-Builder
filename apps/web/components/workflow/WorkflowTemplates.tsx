@@ -8,11 +8,17 @@ import type { CreateWorkflowRequest, WorkflowEdge, WorkflowNode } from "../../ty
 
 const templates: Array<{ name: string; description: string; nodes: WorkflowNode[]; edges: WorkflowEdge[] }> = [
   {
+    name: "Web search with sources",
+    description: "Search the live web using Gemini and return a summary with source links. Run with {\"query\":\"your research question\"}.",
+    nodes: [node("input", "input", "Input", 80, 180), node("search", "tool", "Web Search", 360, 180, { toolKind: "web-search", inputPath: "input.query", maxResults: 5 }), node("output", "output", "Output", 640, 180)],
+    edges: [edge("input-search", "input", "search"), edge("search-output", "search", "output")],
+  },
+  {
     name: "Research and summarize",
     description: "Summarize supplied material and pass the result to an output node. It does not browse the web.",
     nodes: [
       node("input", "input", "Input", 80, 180),
-      node("research", "agent", "Research Agent", 360, 180, { agentType: "research", model: "gemini-3.8-flash", instructions: "Analyze only the supplied context. Separate evidence from inference and do not claim external research." }),
+      node("research", "agent", "Research Agent", 360, 180, { agentType: "research", model: "gemini-3.5-flash-lite", instructions: "Analyze only the supplied context. Separate evidence from inference and do not claim external research." }),
       node("output", "output", "Output", 640, 180),
     ],
     edges: [edge("input-research", "input", "research"), edge("research-output", "research", "output")],
@@ -22,7 +28,7 @@ const templates: Array<{ name: string; description: string; nodes: WorkflowNode[
     description: "Create a task plan, pause for a human decision, then return the plan.",
     nodes: [
       node("input", "input", "Input", 80, 180),
-      node("planner", "agent", "Planner Agent", 350, 180, { agentType: "planner", model: "gemini-3.8-flash", instructions: "Create an ordered plan with dependencies and completion checks." }),
+      node("planner", "agent", "Planner Agent", 350, 180, { agentType: "planner", model: "gemini-3.5-flash-lite", instructions: "Create an ordered plan with dependencies and completion checks." }),
       node("approval", "approval", "Human Approval", 620, 180, { category: "CONTROL" }),
       node("output", "output", "Output", 890, 180),
     ],
@@ -104,7 +110,8 @@ export default function WorkflowTemplates() {
 
 function node(id: string, type: string, label: string, x: number, y: number, extra: Record<string, unknown> = {}): WorkflowNode {
   const category = type === "agent" || type === "reviewer" || type === "llm" ? "AI AGENT" : type === "tool" || type === "condition" || type === "approval" ? "TOOLS" : "CORE";
-  return { id, type, position: { x, y }, data: { label, description: label, category, ...extra } } as WorkflowNode;
+  return { id, type, position: { x, y }, data: { label, description: label, category,
+    ...(["agent", "reviewer", "llm"].includes(type) ? { timeoutMs: 60000, maxTokens: 1024, thinkingLevel: "low" } : {}), ...extra } } as WorkflowNode;
 }
 
 function edge(id: string, source: string, target: string): WorkflowEdge {

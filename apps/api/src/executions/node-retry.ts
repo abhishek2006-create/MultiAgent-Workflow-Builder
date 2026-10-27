@@ -12,7 +12,7 @@ export function isRetryableNodeError(error: unknown, nodeType: string): boolean 
   const candidate = error as { getStatus?: () => number; message?: string };
   const status = typeof candidate.getStatus === "function" ? candidate.getStatus() : undefined;
   if (status === 502 || status === 504) return true;
-  return status === 503 && candidate.message === "AI service is unavailable";
+  return status === 503 && /^AI service(?: at \S+)? is unavailable(?:\.|$)/.test(candidate.message ?? "");
 }
 
 export function nodeRetryDelayMs(retryIndex: number): number {

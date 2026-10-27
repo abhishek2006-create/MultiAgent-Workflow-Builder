@@ -1,4 +1,17 @@
-# Initial API contracts
+# API contracts
+
+## October 28 additions
+
+- `GET /api/ai/configuration`: authenticated application route. Returns connectivity, default model, provider names, configured-key booleans, allowed model IDs and generation limits. It never returns credentials.
+- `GET /api/auth/me`: includes the validated session's `organizationId` and role so Settings can identify the current workspace.
+- `GET /ai/configuration`: internal AI route; requires `X-AI-Service-Secret`. Returns safe provider configuration.
+- `POST /ai/search`: internal AI route; requires the shared secret, `WEB_SEARCH_ENABLED=true`, and a Gemini key. Body: `{"query":"question","max_results":5,"timeout_ms":60000}`. Query length: 1–2000, sources: 1–10, timeout: 1000–60000 ms. Returns structured agent fields plus `searchSources`, `searchQueries`, `searchSuggestionsHtml`, and provider usage. No grounded sources: 502; provider quota: 429; timeout: 504.
+- Web Search nodes use `type:"tool"` and `data:{toolKind:"web-search",inputPath:"input.query",maxResults:5}` or a fixed `searchQuery`. Workspace edit/run permissions and the AI service's server enable switch are enforced. The tool does not fetch arbitrary user URLs.
+- Unexpected AI failures return safe reference IDs; logs record exception type and code locations without prompts or raw provider strings. Complete graph state is filtered to response fields before HTTP validation.
+
+The existing workspace APIs are available through Settings: create, switch workspace, generate an invitation code, and accept an invitation. Membership/roles are checked on the server; codes are bound to their invited email and expire after seven days.
+
+## Earlier contracts
 
 These are the current implementation contracts for manual use and future UI integration. The workflow definition schema is an initial team proposal and should be reviewed before the frontend relies on it.
 

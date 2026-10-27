@@ -9,6 +9,7 @@ import { AuthService } from "./auth.service";
 import { GoogleStrategy } from "./strategies/google.strategy";
 import { GithubStrategy } from "./strategies/github.strategy";
 import { WorkspaceRolesGuard } from "./workspace-roles.guard";
+import { oauthConfigured } from "./oauth-config";
 
 @Module({
   imports: [
@@ -30,8 +31,8 @@ import { WorkspaceRolesGuard } from "./workspace-roles.guard";
 
   providers: [
     AuthService,
-    GoogleStrategy,
-    GithubStrategy,
+    { provide: GoogleStrategy, useFactory: () => oauthConfigured("google") ? new GoogleStrategy() : null },
+    { provide: GithubStrategy, useFactory: () => oauthConfigured("github") ? new GithubStrategy() : null },
     WorkspaceRolesGuard,
   ],
 
