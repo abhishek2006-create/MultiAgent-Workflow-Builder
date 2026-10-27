@@ -564,4 +564,4 @@ For a bug report, include your operating system, Node/Python versions, reproduct
 
 ---
 
-Built by [Abhishek](https://github.com/abhishek2006-create). Source: [MultiAgent-Workflow-Builder](https://github.com/abhishek2006-create/MultiAgent-Workflow-Builder).
+Built by [Abhishek](https://github.com/abhishek2006-create) and [Adi Jain]. Source: [MultiAgent-Workflow-Builder](https://github.com/abhishek2006-create/MultiAgent-Workflow-Builder).
