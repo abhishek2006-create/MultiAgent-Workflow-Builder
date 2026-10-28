@@ -12,8 +12,8 @@ export function executionEdges(edges: WorkflowEdge[], steps: WorkflowExecution["
       (["true", "false"].includes(String(edge.sourceHandle)) && branch !== undefined && branch !== edge.sourceHandle);
     const flowing = !inactive && source?.status === "COMPLETED" && (target?.status === "RUNNING" || edge.target === playbackNodeId);
     const complete = !inactive && source?.status === "COMPLETED" && target?.status === "COMPLETED";
-    const color = inactive ? "#475569" : target?.status === "FAILED" ? "#fb7185"
-      : target?.status === "WAITING_APPROVAL" ? "#fbbf24" : flowing ? "#67e8f9" : complete ? "#34d399" : "#647eaa";
+    const color = inactive ? "#5b6152" : target?.status === "FAILED" ? "#fb7185"
+      : target?.status === "WAITING_APPROVAL" ? "#fbbf24" : flowing ? "#e2eaa0" : complete ? "#a5c77c" : "#717b56";
     return {
       ...edge, type: "workflow", animated: flowing,
       markerEnd: { type: "arrowclosed" as MarkerType, color, width: 18, height: 18 },

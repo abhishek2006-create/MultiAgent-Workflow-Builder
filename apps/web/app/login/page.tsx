@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
+import Link from "next/link";
 import { getApiBaseUrl } from "../../lib/api-url";
 
 export default function LoginPage() {
@@ -21,6 +22,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [returnTo, setReturnTo] = useState<string | null>(null);
   const loadingRef = useRef(false);
+
+  useEffect(() => {
+    if (submitted) window.location.replace("/");
+  }, [submitted]);
 
   useEffect(() => {
     const next = new URLSearchParams(window.location.search).get("next");
@@ -54,10 +59,9 @@ export default function LoginPage() {
       "(prefers-reduced-motion: reduce)",
     ).matches;
 
+    if (reducedMotion) return;
+
     const ctx = gsap.context(() => {
-      if (reducedMotion) {
-        gsap.globalTimeline.timeScale(30);
-      }
 
       const tl = gsap.timeline({
         defaults: { ease: "power3.out" },
@@ -1181,6 +1185,7 @@ export default function LoginPage() {
         }
       `}</style>
       <div className="auth-page">
+        <Link className="auth-home-link" href="/">← Home</Link>
         <div className="bgl" />
         <div className="orb o1" />
         <div className="orb o2" />
@@ -1194,9 +1199,9 @@ export default function LoginPage() {
             </div>
 
             <h1 className="bi">
-              WELCOME TO
+              Welcome back.
               <br />
-               THE AGENT GRID!
+              Make the connection.
             </h1>
 
             <p className="bi">
@@ -1311,7 +1316,7 @@ export default function LoginPage() {
 
           <section className="card" id="card" ref={cardRef}>
             <div id="form" ref={formRef}>
-              <h2 className="fi">WELCOME BACK</h2>
+              <h2 className="fi">Welcome back</h2>
 
               <p className="sub fi">
                 Sign in to your FlowForge AI workspace and continue building.
@@ -1518,10 +1523,10 @@ export default function LoginPage() {
                 type="button"
                 style={{ maxWidth: 260 }}
                 onClick={() => {
-                  window.location.href = returnTo ?? "/workflows";
+                  window.location.href = "/";
                 }}
               >
-                ▶ LAUNCH BUILDER
+                GO TO HOME →
               </button>
             </div>
           </section>

@@ -44,17 +44,17 @@ export function Dashboard() {
 
   const recentUsage = overview?.recentUsage;
   const metrics = [
-    ["WORKFLOWS", overview?.workflowCount ?? 0, "#2f7bff"],
-    ["EXECUTIONS", overview?.executionCount ?? 0, "#8b5cf6"],
+    ["WORKFLOWS", overview?.workflowCount ?? 0, "#d8db77"],
+    ["EXECUTIONS", overview?.executionCount ?? 0, "#d7c58c"],
     ["SUCCESS RATE", overview?.successRate === null || overview?.successRate === undefined ? "—" : `${overview.successRate}%`, "#10b981"],
-    ["TOKENS · LATEST 10 RUNS", recentUsage?.totalTokens ?? 0, "#22d3ee"],
+    ["TOKENS · LATEST 10 RUNS", recentUsage?.totalTokens ?? 0, "#c6c5bf"],
   ] as const;
 
   return (
     <section className="view on">
       <div className="dash">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2>SYSTEM OVERVIEW</h2>
+          <div><p className="eyebrow">WORKSPACE / ANALYTICS</p><h1 className="studio-title">Your workflow, in focus.</h1><p className="studio-subtitle">Every execution. Every connection. A clearer picture.</p></div>
           <div className="flex gap-2">
             <button className="btn" type="button" disabled={refreshing} onClick={() => void load()}>{refreshing ? "REFRESHING…" : "REFRESH"}</button>
             <Link className="btn" href="/workflows">WORKFLOWS</Link>

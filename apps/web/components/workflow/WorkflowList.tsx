@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { ProductIcon } from "../ui/ProductIcon";
 import type { Workflow } from "../../types/workflow";
 
 export default function WorkflowList() {
@@ -54,7 +55,7 @@ export default function WorkflowList() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {workflows.map((workflow) => (
             <article key={workflow.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-5">
-              <div className="flex items-start justify-between gap-3"><h2 className="font-medium">{workflow.name}</h2><span className="font-mono text-[10px] text-slate-400">v{workflow.version}</span></div>
+              <div className="workflow-card-glyph"><span className="iso-icon"><ProductIcon name="flow" /></span><span className="eyebrow">SAVED WORKFLOW</span></div><div className="flex items-start justify-between gap-3"><h2 className="font-medium">{workflow.name}</h2><span className="font-mono text-[10px] text-slate-400">v{workflow.version}</span></div>
               <p className="mt-2 min-h-10 text-sm text-slate-400">{workflow.description || "No description."}</p>
               <p className="mt-4 font-mono text-[10px] text-slate-500">UPDATED {new Date(workflow.updatedAt).toLocaleString()}</p>
               <div className="mt-4 flex gap-2">

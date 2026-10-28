@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { serviceRunning, validPort } from "./dev-services.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const apiDir = path.join(root, "apps/api");
@@ -42,6 +43,11 @@ async function healthy(base) {
 }
 
 async function main() {
+  const port = validPort(config.API_PORT ?? 3001, "API_PORT");
+  if (await serviceRunning("API", port)) {
+    console.log(`FlowForge API is already running at http://localhost:${port}. Reusing it; no duplicate server was started.`);
+    return;
+  }
   const base = (config.AI_SERVICE_URL ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
   if (config.START_LOCAL_AI !== "false") {
     const url = new URL(base);

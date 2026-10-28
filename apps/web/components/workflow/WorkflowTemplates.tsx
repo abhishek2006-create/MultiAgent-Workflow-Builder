@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { IntegrationMap, ProductIcon } from "../ui/ProductIcon";
 import { useRef, useState } from "react";
 import { api } from "../../lib/api";
 import type { CreateWorkflowRequest, WorkflowEdge, WorkflowNode } from "../../types/workflow";
@@ -94,11 +95,12 @@ export default function WorkflowTemplates() {
         <div><p className="font-mono text-xs tracking-[0.2em] text-cyan-300">STARTER FLOWS</p><h1 className="mt-2 text-3xl font-semibold">Workflow templates</h1><p className="mt-2 text-sm text-slate-400">Create a saved copy, then configure and run it in the editor.</p></div>
         <div className="flex gap-3"><Link className="btn" href="/workflows">WORKFLOWS</Link><button className="btn" type="button" disabled={busy} onClick={() => inputRef.current?.click()}>{busy ? "IMPORTING…" : "IMPORT JSON"}</button><input ref={inputRef} hidden type="file" accept="application/json,.json" onChange={(event) => void importFile(event.target.files?.[0])} /></div>
       </div>
+      <div className="template-intro"><div><p className="eyebrow">A STARTING POINT FOR YOUR NEXT IDEA</p><h2>Already connected.<br /><em>Ready to make your own.</em></h2><p>Choose a flow, connect your models and put your ideas in motion.</p></div><IntegrationMap compact /></div>
       {error && <p role="alert" className="mb-5 rounded border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p>}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {templates.map((template) => (
+        {templates.map((template, index) => (
           <article key={template.name} className="rounded-xl border border-white/10 bg-white/[0.035] p-5">
-            <h2 className="text-lg font-medium">{template.name}</h2><p className="mt-2 min-h-12 text-sm text-slate-400">{template.description}</p>
+            <div className="template-card-top"><span className="iso-icon"><ProductIcon name={["globe", "search", "check", "code"][index]} /></span><span className="eyebrow">FLOW / 0{index + 1}</span></div><h2 className="text-lg font-medium">{template.name}</h2><p className="mt-2 min-h-12 text-sm text-slate-400">{template.description}</p>
             <p className="mt-4 font-mono text-[10px] text-slate-500">{template.nodes.length} NODES · {template.edges.length} CONNECTIONS</p>
             <button className="btn pri mt-4" type="button" disabled={busy} onClick={() => void createWorkflow(template)}>{busy ? "CREATING…" : "USE TEMPLATE"}</button>
           </article>
