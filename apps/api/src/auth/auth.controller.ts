@@ -1,3 +1,4 @@
+import { frontendOrigin } from "./oauth-urls";
 import {
   Body,
   Controller,
@@ -90,7 +91,7 @@ export class AuthController {
    *
    * Frontend:
    * window.location.href =
-   *   "http://localhost:3001/api/auth/google";
+   *   "/api/auth/google";
    */
   @Get("google")
   @UseGuards(GoogleAuthGuard)
@@ -121,7 +122,7 @@ export class AuthController {
    *
    * Frontend:
    * window.location.href =
-   *   "http://localhost:3001/api/auth/github";
+   *   "/api/auth/github";
    */
   @Get("github")
   @UseGuards(GithubAuthGuard)
@@ -192,7 +193,7 @@ export class AuthController {
 
       return res.redirect(
         this.getFrontendUrl(
-          "/workflows",
+          "/",
         ),
       );
     } catch (error) {
@@ -231,11 +232,7 @@ export class AuthController {
   private getFrontendUrl(
     path: string,
   ) {
-    const frontendUrl = (
-      process.env.WEB_ORIGIN?.split(",")[0]?.trim() ||
-      process.env.FRONTEND_URL ||
-      "http://localhost:3000"
-    ).replace(/\/$/, "");
+    const frontendUrl = frontendOrigin();
 
     return `${frontendUrl}${path}`;
   }

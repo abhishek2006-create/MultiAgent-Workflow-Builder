@@ -23,28 +23,50 @@ The application stores workflow versions, execution results, node errors and app
 
 **You can try the editor, authentication and data-tool workflows without buying an AI API key.** Agent, LLM, Reviewer and Web Search nodes need access to their selected provider.
 
-## A look inside
+## Website screenshots
 
-![FlowForge workflow editor with directional connections](docs/implementation/screenshots/workflow-direction.png)
+Latest interface screenshots supplied on **29 October 2026**.
 
-*The workflow editor: connected agents, execution states and human approval.*
+### Landing page
 
-![Dashboard showing a completed calculator workflow](docs/implementation/screenshots/live-dashboard.png)
+The cinematic Three.js environment, Home navigation and entry point into the workflow builder.
 
-*Actual data from a temporary verification workspace: one completed calculator run. These figures are read from the database, not preset demo values.*
+![FlowForge AI landing page with cinematic city background and Start Building button](docs/implementation/screenshots/landing-page-current.png)
+
+### Run a workflow
+
+Provide JSON input before starting an execution from the visual builder.
+
+![Workflow builder with the Run workflow dialog and JSON runtime input](docs/implementation/screenshots/workflow-run-input-current.png)
+
+### Live workflow execution
+
+The canvas shows completed steps and the Research and Coding agents running in parallel, with directional flow toward review and human approval. This image captures an in-progress run, not a completed result.
+
+![Running workflow with parallel research and coding branches, node states and directional connections](docs/implementation/screenshots/workflow-running-current.png)
+
+### Completed workflow
+
+The execution console and canvas show all seven steps completed, including the parallel agents, review, human approval and final output.
+
+![Completed multi-agent workflow with all seven node states marked completed and saved execution output visible](docs/implementation/screenshots/workflow-completed-current.png)
 
 ## Contents
 
+- [Website screenshots](#website-screenshots)
 - [What you can build](#what-you-can-build)
+- [Interface and motion](#interface-and-motion)
 - [Architecture and technology](#architecture-and-technology)
 - [Prerequisites](#prerequisites)
 - [Set up locally](#set-up-locally)
+- [Login and navigation](#login-and-navigation)
 - [Run your first workflow without an AI key](#run-your-first-workflow-without-an-ai-key)
 - [Run an AI workflow](#run-an-ai-workflow)
 - [Enable web search](#enable-web-search)
 - [Optional Google and GitHub login](#optional-google-and-github-login)
 - [Everyday commands](#everyday-commands)
 - [Testing](#testing)
+- [Local port conflicts](#local-port-conflicts)
 - [Troubleshooting](#troubleshooting)
 - [Deployment](#deployment)
 - [Project structure](#project-structure)
@@ -64,7 +86,7 @@ The application stores workflow versions, execution results, node errors and app
 | Execution history | Saved inputs, node results, errors, timing, pinned workflow versions, cancellation and retry |
 | Dashboard | Workspace counts, execution states, success rate, recent activity and provider-reported token usage |
 | Accounts | Email/password login, optional Google/GitHub OAuth, workspace switching, invitations and roles |
-| Interface | Dark blue/purple styling, GSAP transitions, cursor effects and directional workflow animation with reduced-motion support |
+| Interface | Cinematic Three.js landing page, charcoal workspace, warm accents, GSAP transitions, cursor effects and directional workflow animation with reduced-motion support |
 
 For example:
 
@@ -75,6 +97,12 @@ Input → Planner Agent ────┤                    ├→ Reviewer → A
 ```
 
 A Research Agent analyzes the material passed to it. For live web evidence, add a **Web Search** node upstream.
+
+## Interface and motion
+
+The landing page uses an original Three.js city scene with metallic type, GSAP entrance motion and a pause/resume control. The rest of the app shares charcoal panels, warm accents and isometric connection graphics. Palette and configuration panels remain accessible on mobile.
+
+Three.js loads only on the landing page. Browsers without WebGL retain a CSS fallback, and reduced-motion preferences disable decorative movement. Run results and dashboard figures still come from the API/database. See the [29 October visual redesign notes](docs/implementation/ui-redesign-2026-10-29.md) for scope and verification.
 
 ## Architecture and technology
 
@@ -90,7 +118,7 @@ flowchart LR
 
 | Component | Technology | Responsibility |
 | --- | --- | --- |
-| Frontend | Next.js 15, React 19, TypeScript, React Flow, Tailwind CSS, GSAP | Workflow canvas, forms, history, approvals and dashboard |
+| Frontend | Next.js 15, React 19, TypeScript, React Flow, Tailwind CSS, GSAP, Three.js | Workflow canvas, forms, history, approvals and dashboard |
 | API | NestJS 11, Prisma 6 | Authentication, workspace access, workflow versions and execution scheduling |
 | AI service | Python, FastAPI, LangGraph, Pydantic | Provider requests, structured responses and grounded search |
 | Database | PostgreSQL 16 | Accounts, workflows, execution steps, approvals and worker leases |
@@ -251,11 +279,13 @@ npm run dev:all
 
 Keep this terminal open. The launcher starts the frontend and API; the API launcher starts the local AI service if it is missing, or reuses an existing healthy one. The API's development startup also checks PostgreSQL and applies pending migrations.
 
+The frontend is **http://localhost:3002**. The API defaults to port 3001; if another application uses it, configure port 3101 in the root/API environment and point `API_INTERNAL_URL` to `http://127.0.0.1:3101` in `apps/web/.env.local`. See [Local port conflicts](#local-port-conflicts).
+
 | Service | Local address | Purpose |
 | --- | --- | --- |
 | Website | **http://localhost:3002** | Open this in your browser |
 | API | http://localhost:3001/api | Frontend/backend requests |
-| API readiness | http://localhost:3001/api/health/ready | Confirms API/database readiness |
+| API readiness | http://localhost:3002/api/health/ready | Confirms API/database readiness through the frontend proxy; works with either configured API port |
 | AI health | http://127.0.0.1:8000/ai/health | Confirms the Python service is running |
 
 AI health is a liveness check; it does not prove that your provider key has credits or model access. Sign in and open **Settings** to see configured providers. A successful AI workflow is the end-to-end check.
@@ -272,16 +302,25 @@ npm run dev:api
 npm run dev
 ```
 
-Do not run this pair alongside `npm run dev:all`; that would start duplicate services on the same ports.
+Use either this pair or `npm run dev:all` for normal startup. Development launchers reuse an already-running FlowForge service; a port owned by another application produces a clear error without stopping that application.
 
 Press **Ctrl+C** to stop the development launcher. PostgreSQL can remain running; `npm run db:stop` stops it while preserving its volume. An AI process that was already running before the launcher started is managed separately.
+
+## Login and navigation
+
+Successful email/password sign-in, GitHub sign-in and Google sign-in take users to the **landing page (`/`) first**. New email registrations also open the landing page automatically. A previous protected-page `next` parameter does not override this landing-first behavior.
+
+- **Home** in the main navigation returns to the landing page from the workspace.
+- Standalone **Login** and **Sign up** screens have their own **Home** control.
+- The FlowForge logo also links to the landing page.
+- After signing in, use **Workflows**, **Templates**, **Builder**, **Approvals**, **Settings**, or **Overview** (the dashboard) to continue.
 
 ## Run your first workflow without an AI key
 
 Use this check first to verify accounts, the editor, saved workflows, execution and the database.
 
 1. Open **http://localhost:3002/signup** and create an email/password account.
-2. Complete the consent checkbox if you agree to the displayed terms, then open your workspace.
+2. Complete the consent checkbox if you agree to the displayed terms. Successful registration opens the landing page first; use its navigation to continue.
 3. Go to **Templates**.
 4. Select **Parse structured JSON → Use template**.
 5. Click **Validate**. The graph should be valid.
@@ -296,7 +335,7 @@ Use this check first to verify accounts, the editor, saved workflows, execution 
 7. Click **Start run**.
 8. Confirm the execution reaches **COMPLETED** and its output contains the parsed `project`, `ready` and `steps` fields.
 9. Open **History** to inspect its saved steps and results.
-10. Open **Dashboard**. The run should appear in recent activity and execution counts. The dashboard refreshes every five seconds while visible; **Refresh** also updates it manually.
+10. Open **Overview** (the dashboard). The run should appear in recent activity and execution counts. The dashboard refreshes every five seconds while visible; **Refresh** also updates it manually.
 
 This workflow consumes no AI tokens. A zero token count for this run is expected.
 
@@ -395,14 +434,19 @@ The execution returns a summary and source links. Search suggestions and source 
 
 ## Optional Google and GitHub login
 
-Email/password login is sufficient for local testing. To enable OAuth, create an OAuth application with the provider and put its credentials in the API environment.
+Email/password login works without OAuth. To enable provider sign-in, create a dedicated OAuth app and configure its client ID and secret in the API environment.
 
-| Provider | Variables | Local callback URL |
-| --- | --- | --- |
-| Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | `http://localhost:3001/api/auth/google/callback` |
-| GitHub | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` | `http://localhost:3001/api/auth/github/callback` |
+For this local setup, register `http://localhost:3002/api/auth/github/callback` as the **Authorization callback URL** in the FlowForge GitHub OAuth app. Set `GITHUB_CALLBACK_URL` to the same value in your API environment. For Google, use `http://localhost:3002/api/auth/google/callback` as an authorized redirect URI and `GOOGLE_CALLBACK_URL` value. These URLs go through the frontend proxy, so a separate application on port 3001 cannot receive FlowForge's callback. After changing provider environment variables, restart the API.
 
-Register the exact callback with the provider, then restart the API. Use production HTTPS callbacks when deployed. If OAuth is unconfigured, the application reports that and email/password remains available.
+Use a dedicated OAuth app for FlowForge if your existing OAuth credentials belong to another project. Provider registration changes must be made in the provider account; changing a local environment file does not update GitHub or Google settings.
+
+### GitHub reports “redirect_uri is not associated with this application”
+
+Check that the **Client ID** in your API environment belongs to the same OAuth app whose settings you are editing. Its saved authorization callback must match `http://localhost:3002/api/auth/github/callback` exactly, including the port and `/api` prefix. Save the provider settings, restart the API if its environment changed, close the old GitHub warning tab, and begin a fresh sign-in from FlowForge. Do not share the client secret in bug reports.
+
+### Login hydration warning after updating the interface
+
+Refresh the login page with **Ctrl+Shift+R** after updating the frontend. Shared route transitions now animate only their own decorative overlay; they do not modify streamed login/signup elements before hydration. Auth pages respect reduced-motion settings without changing GSAP's global timeline speed. Report a warning that persists after a fresh reload with its route and console message.
 
 ## Everyday commands
 
@@ -445,7 +489,13 @@ npm run test:integration
 - Integration checks need PostgreSQL and a database account allowed to create/drop the isolated test schema. The local Compose account supports this; do not use an unnecessarily privileged production application account for tests.
 - `npm run test:integration:live` explicitly calls the configured AI service. It requires working provider access and can consume tokens/quota.
 
-The latest local verification recorded **57 API tests, 13 frontend tests and 27 Python tests**. Frontend lint, TypeScript checking, a production build and the isolated HTTP/database integration checks also passed. A browser check verified saving version 2, graph validation, a calculator result of 1048, approval and automatic dashboard updates. These are local verification results, not a claim that a hosted deployment or GitHub Actions run has already passed.
+The latest local verification recorded **60 API tests, 14 frontend tests and 27 Python tests**, plus five startup-guard tests. Frontend lint, TypeScript checking, a production build and the isolated HTTP/database integration checks also passed. A browser check verified saving version 2, graph validation, a calculator result of 1048, approval and automatic dashboard updates. These are local verification results, not a claim that a hosted deployment or GitHub Actions run has already passed.
+
+## Local port conflicts
+
+Development commands now reuse an already-running FlowForge frontend/API instead of starting a competing listener. `npm run dev:all` reads the configured API port and starts only missing services. A port owned by a different application is reported; that application is never stopped automatically.
+
+If another project uses port 3001, set `API_PORT=3101` in the root `.env` and `apps/api/.env`, and `API_INTERNAL_URL=http://127.0.0.1:3101` in `apps/web/.env.local`. Restart the affected development terminals. Open the frontend at `http://localhost:3002`. Use either `npm run dev:all` or separate API/web terminals. Startup guard tests: `npm run test:startup`.
 
 ## Troubleshooting
 
@@ -454,7 +504,7 @@ The latest local verification recorded **57 API tests, 13 frontend tests and 27 
 | `Can't reach database server at localhost:5432` | Start Docker, run `npm run db:up`, then check `docker compose -f docker-compose.db.yml ps`. Confirm `DATABASE_URL` matches the database credentials. |
 | `AI service ... is unavailable` | Keep the dev terminal open. Check `/ai/health`, the virtual environment and `AI_SERVICE_URL`. If Python stopped while API stayed running, run `npm run dev:ai` separately and retry. |
 | `AI service authentication failed` | Make `AI_SERVICE_SECRET` identical in root `.env`, `apps/api/.env` and `apps/ai/.env`. Restart API and AI. Remember root values and shell variables can override API file values. |
-| `EADDRINUSE` on 3001/3002, or Windows `10048` on 8000 | A service already owns the port. Stop the duplicate terminal/process you started; run one copy of each service. Do not launch `dev:all` alongside the separate dev commands. |
+| `EADDRINUSE` on 3001/3002, or Windows `10048` on 8000 | Launchers reuse healthy FlowForge services. If a different application owns the port, keep it running and choose another configured port, or stop its owning terminal deliberately. For port 3001 conflicts, use API port 3101 and update the frontend proxy to match. |
 | `AI service request timed out` | Read the AI terminal and full step error. Verify provider connectivity/quota, shorten instructions/output, and keep node timeouts within the supported 1–60 second range. The API HTTP timeout is a separate setting. |
 | HTTP `429` | Check provider rate limits, credits, billing and model-specific quota. Ordinary Gemini generation and grounded search may have different limits. Retrying endlessly will not fix exhausted quota. |
 | Provider key/model rejected | Configure the key for the selected `gpt-*` or `gemini-*` model. Check model access and its allowlist, restart Python, then update saved nodes if necessary. |
@@ -470,7 +520,7 @@ The latest local verification recorded **57 API tests, 13 frontend tests and 27 
 Use this to identify the owner before stopping a process:
 
 ```powershell
-Get-NetTCPConnection -State Listen -LocalPort 3001,3002,8000 -ErrorAction SilentlyContinue |
+Get-NetTCPConnection -State Listen -LocalPort 3001,3002,3101,8000 -ErrorAction SilentlyContinue |
   Select-Object LocalAddress, LocalPort, OwningProcess
 ```
 
@@ -510,7 +560,7 @@ Production preparation:
 2. Use reachable service addresses: `localhost` inside a deployed container refers to that container, not another service.
 3. Set `WEB_ORIGIN` to the exact public HTTPS frontend origin. The API supports a comma-separated list when needed.
 4. Keep the AI service and database on private networking where available. The frontend talks to the API through its same-origin proxy.
-5. Update OAuth callbacks to the deployed API HTTPS URL if OAuth is enabled.
+5. Update OAuth callbacks to the public HTTPS URL that serves `/api/auth/<provider>/callback` (normally the frontend proxy), and register that exact URL with the provider.
 6. Configure health checks and run a first data-tool workflow, then an AI workflow and an approval flow.
 7. Confirm saved data survives service restarts and plan database backups.
 

@@ -1,3 +1,4 @@
+import { oauthCallbackUrl } from "../oauth-urls";
 import { Injectable } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { Strategy, VerifyCallback } from "passport-google-oauth20";
@@ -11,9 +12,7 @@ export class GoogleStrategy extends PassportStrategy(
     super({
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL:
-        process.env.GOOGLE_CALLBACK_URL ||
-        "http://localhost:3001/api/auth/google/callback",
+      callbackURL: oauthCallbackUrl("google"),
       scope: ["profile", "email"],
     });
   }

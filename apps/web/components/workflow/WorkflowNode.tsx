@@ -88,6 +88,8 @@ export default function WorkflowNode({
 
   return (
     <div
+      data-node-status={status}
+      data-node-selected={selected ? "true" : "false"}
       aria-label={`${nodeData.label} workflow node, ${statusLabel.toLowerCase()}`}
       className={`
         workflow-node-card relative min-w-[220px] rounded-xl border
@@ -111,7 +113,7 @@ export default function WorkflowNode({
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-cyan-300 transition-shadow hover:!shadow-[0_0_12px_rgba(34,211,238,0.9)]"
+        className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-[#dce68a] transition-shadow hover:!shadow-[0_0_12px_rgba(34,211,238,0.9)]"
       />
 
       <div className="flex items-center justify-between">
@@ -190,7 +192,7 @@ export default function WorkflowNode({
         <Handle
           type="source"
           position={Position.Right}
-          className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-blue-400 transition-shadow hover:!shadow-[0_0_12px_rgba(96,165,250,0.9)]"
+          className="!h-2.5 !w-2.5 !border-2 !border-slate-950 !bg-[#dce68a] transition-shadow hover:!shadow-[0_0_12px_rgba(96,165,250,0.9)]"
         />
       )}
     </div>

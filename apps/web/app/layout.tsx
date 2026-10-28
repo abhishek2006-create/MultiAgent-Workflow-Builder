@@ -1,11 +1,12 @@
 import "./globals.css";
+import "./studio.css";
 import type { Metadata } from "next";
 import { TopNav } from "../components/layout/Topbar";
 import SiteMotion from "../components/layout/SiteMotion";
 
 export const metadata: Metadata = {
   title: "FlowForge AI",
-  description: "AI workflow automation builder",
+  description: "Design connected AI workflows with agents, tools and human approval. Intelligence, orchestrated.",
 };
 
 export default function RootLayout({
@@ -16,7 +17,7 @@ export default function RootLayout({
       <body>
         <SiteMotion>
           <TopNav />
-          <main id="app">{children}</main>
+          <main id="app" tabIndex={-1}>{children}</main>
         </SiteMotion>
       </body>
     </html>

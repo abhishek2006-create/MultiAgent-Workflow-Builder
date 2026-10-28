@@ -16,7 +16,7 @@ import {
   type OnNodesChange,
   type OnEdgesChange,
 } from "@xyflow/react";
-import type { RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 
 import "@xyflow/react/dist/style.css";
 
@@ -73,7 +73,7 @@ function WorkflowEdge({
         markerStart={markerStart}
         markerEnd={markerEnd}
         style={{
-          stroke: selected ? "rgba(103,232,249,0.9)" : "rgba(100,180,255,0.42)",
+          stroke: selected ? "rgba(223,232,153,0.9)" : "rgba(145,160,111,0.5)",
           strokeWidth: selected ? 2.5 : 1.6,
           ...style,
         }}
@@ -83,9 +83,9 @@ function WorkflowEdge({
           aria-hidden="true"
           className="workflow-edge-pulse"
           d={edgePath}
-          style={{ stroke: String(style?.stroke ?? "#67e8f9"), color: String(style?.stroke ?? "#67e8f9") }}
+          style={{ stroke: String(style?.stroke ?? "#e2eaa0"), color: String(style?.stroke ?? "#e2eaa0") }}
         />
-        <circle className="workflow-edge-particle" r="4" fill={String(style?.stroke ?? "#67e8f9")} aria-hidden="true">
+        <circle className="workflow-edge-particle" r="4" fill={String(style?.stroke ?? "#e2eaa0")} aria-hidden="true">
           <animateMotion dur="1s" repeatCount="indefinite" path={edgePath} />
         </circle>
       </>)}
@@ -121,6 +121,25 @@ export default function WorkflowCanvas({
   onConnect,
   onNodeClick,
 }: WorkflowCanvasProps) {
+  const flowRef = useRef<ReactFlowInstance<Node<WorkflowNodeData & Record<string, unknown>>, Edge> | null>(null);
+  const handleInit = useCallback((instance: ReactFlowInstance<Node<WorkflowNodeData & Record<string, unknown>>, Edge>) => {
+    flowRef.current = instance;
+    onInit(instance);
+  }, [onInit]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let timer: ReturnType<typeof setTimeout>;
+    // Keep the graph in view when responsive panels or the execution console resize it.
+    const fit = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { void flowRef.current?.fitView({ padding: 0.18, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180 }); }, 120);
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(canvas);
+    fit();
+    return () => { observer.disconnect(); clearTimeout(timer); };
+  }, [canvasRef, nodes.length]);
   const runCompleted =
     !isRunning &&
     nodes.length > 0 &&
@@ -138,7 +157,7 @@ export default function WorkflowCanvas({
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onInit={onInit}
+        onInit={handleInit}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -152,7 +171,7 @@ export default function WorkflowCanvas({
           type: "workflow",
           animated: false,
           style: {
-            stroke: "rgba(100,180,255,0.35)",
+            stroke: "rgba(145,160,111,0.4)",
             strokeWidth: 2,
           },
         }}
@@ -164,21 +183,21 @@ export default function WorkflowCanvas({
           variant={BackgroundVariant.Dots}
           gap={28}
           size={1.1}
-          color="rgba(150,180,255,0.24)"
+          color="rgba(170,184,139,0.2)"
         />
 
         <Controls />
 
         <MiniMap
           nodeColor={(node) => {
-            if (node.data.status === "running") return "#22d3ee";
+            if (node.data.status === "running") return "#dce68a";
             if (node.data.status === "waiting") return "#fbbf24";
             if (node.data.status === "completed") return "#34d399";
-            if (node.type === "input" || node.type === "output") return "#22d3ee";
-            if (node.type === "reviewer") return "#a78bfa";
+            if (node.type === "input" || node.type === "output") return "#dce68a";
+            if (node.type === "reviewer") return "#acb57d";
             if (node.type === "approval") return "#fbbf24";
-            if (node.type === "tool") return "#38bdf8";
-            return "#2f7bff";
+            if (node.type === "tool") return "#c3ce91";
+            return "#adb97c";
           }}
           maskColor="rgba(0,0,0,0.65)"
         />
